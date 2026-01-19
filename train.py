@@ -109,6 +109,7 @@ def resume():
 def start():
     batch_size = 32
     learning_rate = 0.001
+    weight_decay = 1e-4
     num_epochs = 10
 
     print('Using device:', DEVICE)
@@ -120,7 +121,7 @@ def start():
     model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16').to(DEVICE)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9)
+    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
 
     # Init logger
     run = {
@@ -128,6 +129,7 @@ def start():
         'model': 'dino_vits16_centralized',
         'batch_size': batch_size,
         'learning_rate': learning_rate,
+        'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
         'best_accuracy': 0
     }
