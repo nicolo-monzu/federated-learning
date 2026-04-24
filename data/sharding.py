@@ -1,21 +1,39 @@
 from torch.utils.data import Subset
 import math
+import matplotlib.pyplot as plt
+from .sharding_classes import Class, Client, find_available_client
 
 TESTING = True
+THRESHOLD = 30
 
 def testing_stuff(main_dataset, threshold) -> Subset:
-    indices_to_keep = [i for i, (_, l) in enumerate(main_dataset) if l <= 5]
+    indices_to_keep = [i for i, (_, l) in enumerate(main_dataset) if l < threshold]
     return Subset(main_dataset, indices_to_keep)
 
-def printing_stuff(sub_datasets: list[Subset], classes_total: int, mode: str) -> None:
-    print(f"\n\n{mode} MODE")
+def printing_stuff(sub_datasets: list[Subset], classes_total: int, mode: str, clients: int, nc: int=0) -> None:
+    # print(f"\n\n{mode} MODE")
+    counter_matrix = [[] for _ in range(clients)]
     for i, c in enumerate(sub_datasets):
-        print(f"\nclient {i}")
-        new_counters = [0 for i in range(classes_total)]
+        # print(f"\nclient {i}")
+        counter_matrix[i] = [0 for _ in range(classes_total)]
         for s, l in c:
-            new_counters[l] += 1
-        for i in range(classes_total):
-            print("samples class " + str(i) + ": " + str(new_counters[i]))
+            counter_matrix[i][l] += 1
+        # for j in range(classes_total):
+            # print("samples class " + str(j) + ": " + str(counter_matrix[i][j]))
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(counter_matrix, cmap="viridis_r")
+    ax.set_title(f"{mode}, clients: {clients}" + (", nc: " + str(nc) if mode.__contains__("non-iid") else ""))
+    ax.set_xticks(range(classes_total), labels=[f"class {i}" for i in range(classes_total)],
+                  rotation=45, ha="right", rotation_mode="anchor")
+    ax.set_yticks(range(clients), labels=[f"client {i}" for i in range(clients)])
+    for i in range(clients):
+        for j in range(classes_total):
+            text = ax.text(j, i, counter_matrix[i][j],
+                           ha="center", va="center", color="w")
+    fig.tight_layout()
+    plt.show()
+
 
 def iid_sharding(main_dataset: Subset, k: int):
     """
@@ -25,12 +43,12 @@ def iid_sharding(main_dataset: Subset, k: int):
     k: amount of federated learning clients
     """
     if TESTING:
-        main_dataset = testing_stuff(main_dataset, 5)
+        main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
     classes_total = 1 + max([l for s, l in main_dataset])
     sub_datasets = []
-    counters = [0 for i in range(classes_total)]    # each element represent the amount of samples of classes i encountered
-    indices = [[] for i in range(k)] # each list is a set of indices included in a client
+    counters = [0 for _ in range(classes_total)]    # each element represent the amount of samples of classes i encountered
+    indices = [[] for _ in range(k)] # each list is a set of indices included in a client
     for i, (s, l) in enumerate(main_dataset):
         current_index = counters[l] % k
         indices[current_index].append(i)
@@ -39,7 +57,7 @@ def iid_sharding(main_dataset: Subset, k: int):
         sub_datasets.append(Subset(main_dataset, indices[clients]))
 
     if TESTING:
-        printing_stuff(sub_datasets, classes_total, "iid")
+        printing_stuff(sub_datasets, classes_total, "iid", k)
 
     return
 
@@ -53,7 +71,7 @@ def non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
     nc: amount of different classes in each client
     """
     if TESTING:
-        main_dataset = testing_stuff(main_dataset, 5)
+        main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
     classes_total = 1 + max([l for s, l in main_dataset])
     if k > 1 + classes_total//nc:
@@ -63,12 +81,43 @@ def non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
         k = math.ceil(classes_total / nc)
         print("error: these parameters will result in not enough available classes. self adjusting k to ", k)
     sub_datasets = []
-    indices = [[] for i in range(k)]
+    indices = [[] for _ in range(k)]
     for i in range(k):
         indices[i] = [i2 for i2, (_, label) in enumerate(main_dataset) if label//nc == i]
         sub_datasets.append(Subset(main_dataset, indices[i]))
 
     if TESTING:
-        printing_stuff(sub_datasets, classes_total, "non iid")
+        printing_stuff(sub_datasets, classes_total, "non-iid", k, nc)
+
+    return sub_datasets
+
+
+def advanced_non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
+    if TESTING:
+        main_dataset = testing_stuff(main_dataset, THRESHOLD)
+
+    classes_total = 1 + max([l for s, l in main_dataset])
+    if nc * k < classes_total:
+        print(f"combination of clients and classes per client cannot accomodate all classes! (Nc * k) < {classes_total}")
+        exit(0)
+    clients_per_class = (nc * k)//classes_total
+    clients_per_class_last = (nc * k) % classes_total
+    if clients_per_class_last == 0:
+        classes = [Class(i, clients_per_class) for i in range(classes_total)]
+    else:
+        classes = [Class(i, clients_per_class) for i in range(classes_total-1)]
+        classes.append(Class(classes_total - 1, clients_per_class_last))
+    clients = [Client(nc) for _ in range(k)]
+    for i, (s, l) in enumerate(main_dataset):
+        target_client, new_client_flag = find_available_client(clients, classes[l])
+        if new_client_flag:
+            clients[target_client].add_classes(l)
+            classes[l].add_client(target_client)
+        clients[target_client].add_index(i)
+        classes[l].update_counter()
+    sub_datasets = [Subset(main_dataset, indices) for indices in [c.get_indices() for c in clients]]
+
+    if TESTING:
+        printing_stuff(sub_datasets, classes_total, " advanced non-iid", k, nc)
 
     return sub_datasets
