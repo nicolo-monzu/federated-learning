@@ -110,10 +110,15 @@ def resume(run_name, num_epochs):
 
     # delete temp files
     try:
-        os.remove(f'{checkpoints_dir}/{run_name}_last.pt.tmp')
+        os.remove(f'{checkpoints_dir}/{run_name}_last.pth.tmp')
+    except FileNotFoundError:
+        pass
+
+    try:
         os.remove(f'{checkpoints_dir}/{run_name}_best.pth.tmp')
     except FileNotFoundError:
         pass
+
 
     last = torch.load(f'{checkpoints_dir}/{run_name}_last.pth')
     best = torch.load(f'{checkpoints_dir}/{run_name}_best.pth')
@@ -131,6 +136,9 @@ def resume(run_name, num_epochs):
         os.sync()
 
     if DEBUG:
+        if not run['debug']:
+            print('Error: Attempted to resume in debug mode a non debug training')
+            exit()
         print('Debug mode')
     print('Using device:', DEVICE)
 
@@ -142,6 +150,10 @@ def resume(run_name, num_epochs):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
+
+    #Restore state
+    model.load_state_dict(last['model_state_dict'])
+    optimizer.load_state_dict(last['optimizer_state_dict'])
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
@@ -165,7 +177,8 @@ def start(num_epochs):
         'learning_rate': learning_rate,
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
-        'best_accuracy': 0
+        'best_accuracy': 0,
+        'debug': DEBUG
     }
     logger = Logger(log_dir=log_dir, run_name=run['name'])
     logger.start(run)
