@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from data.dataloader import create_dataloaders
 from logger import Logger
+from plot import plot_training
 
 DEBUG = False
 
@@ -106,7 +107,8 @@ def train(num_epochs, run_name, model, train_loader, val_loader, criterion, opti
 
 def resume(run_name, num_epochs):
     checkpoints_dir = 'centralized_model/checkpoints/'
-    log_dir = 'centralized_model/logs/'
+    logs_dir = 'centralized_model/logs/'
+    plots_dir = 'centralized_model/plots/'
 
     # delete temp files
     try:
@@ -128,7 +130,7 @@ def resume(run_name, num_epochs):
         save(last, f'{checkpoints_dir}/{run_name}_best.pth')
 
     best_acc = max(last['accuracy'], best['accuracy'])
-    logger = Logger(log_dir=log_dir, run_name=run_name)
+    logger = Logger(log_dir=logs_dir, run_name=run_name)
     logger.resume(last['epoch'], best_acc)
     run = logger.get_run()
 
@@ -159,15 +161,17 @@ def resume(run_name, num_epochs):
     print(f'Run name: {run['name']}')
     print('Resume training')
     train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, logger, checkpoints_dir, best_acc, last['epoch']+1)
+    plot_training(run['name'], logs_dir, plots_dir)
 
 def start(num_epochs):
     batch_size = 32
     learning_rate = 0.001
     weight_decay = 1e-4
 
-    log_dir='centralized_model/logs'
+    logs_dir='centralized_model/logs'
     checkpoints_dir = 'centralized_model/checkpoints/'
     os.makedirs(checkpoints_dir, exist_ok=True)
+    plots_dir = 'centralized_model/plots/'
 
     # Init logger
     run = {
@@ -180,7 +184,7 @@ def start(num_epochs):
         'best_accuracy': 0,
         'debug': DEBUG
     }
-    logger = Logger(log_dir=log_dir, run_name=run['name'])
+    logger = Logger(log_dir=logs_dir, run_name=run['name'])
     logger.start(run)
 
     if DEBUG:
@@ -200,6 +204,7 @@ def start(num_epochs):
     print(f'Run name: {run['name']}')
     print('Start training')
     train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, logger, checkpoints_dir, 0)
+    plot_training(run['name'], logs_dir, plots_dir)
 
 if __name__ == '__main__':
     start(10 if not DEBUG else 1)
