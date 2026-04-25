@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from .sharding_classes import Class, Client, find_available_client
 
 TESTING = True
-THRESHOLD = 30
+THRESHOLD = 20
 
 def testing_stuff(main_dataset, threshold) -> Subset:
     indices_to_keep = [i for i, (_, l) in enumerate(main_dataset) if l < threshold]
@@ -34,6 +34,18 @@ def printing_stuff(sub_datasets: list[Subset], classes_total: int, mode: str, cl
     fig.tight_layout()
     plt.show()
 
+def prevent_code_breaking(main_dataset: Subset, classes_total, k) -> Subset:
+    labels = [l for (_, l) in main_dataset]
+    indices = [i for i in range(len(labels))]
+    new_indices = []
+    for c in range(k):  # iterate thru clients
+        for l in range(classes_total):  # iterate thru classes
+            target_index = labels.index(l)
+            new_indices.append(target_index)
+            labels[target_index] = -1
+            indices[target_index] = -1
+    return Subset(main_dataset, new_indices + [i for i in indices if i != -1])
+
 
 def iid_sharding(main_dataset: Subset, k: int):
     """
@@ -59,21 +71,15 @@ def iid_sharding(main_dataset: Subset, k: int):
     if TESTING:
         printing_stuff(sub_datasets, classes_total, "iid", k)
 
-    return
+    return sub_datasets
 
-
+"""
 def non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
-    """
-    each training subset has  nc different classes
-
-    main_dataset: training dataset
-    K: amount of federated learning clients
-    nc: amount of different classes in each client
-    """
     if TESTING:
         main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
     classes_total = 1 + max([l for s, l in main_dataset])
+    main_dataset = prevent_code_breaking(main_dataset, classes_total, k)
     if k > 1 + classes_total//nc:
         k = math.ceil(classes_total/nc)
         print("error: these parameters will result in empty clients. self adjusting k to ", k)
@@ -90,23 +96,27 @@ def non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
         printing_stuff(sub_datasets, classes_total, "non-iid", k, nc)
 
     return sub_datasets
-
+"""
 
 def advanced_non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
     if TESTING:
         main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
     classes_total = 1 + max([l for s, l in main_dataset])
+    main_dataset = prevent_code_breaking(main_dataset, classes_total, k)
+    if TESTING:
+        limit = classes_total * k
+        print([l for (_, l) in main_dataset][:limit])
+        print([l for (_, l) in main_dataset][limit:2*limit])
     if nc * k < classes_total:
         print(f"combination of clients and classes per client cannot accomodate all classes! (Nc * k) < {classes_total}")
         exit(0)
+    if nc > classes_total:
+        print(f"required classes in each client ({nc}) are more than total classes present in the dataset ({classes_total})")
+        exit(0)
     clients_per_class = (nc * k)//classes_total
-    clients_per_class_last = (nc * k) % classes_total
-    if clients_per_class_last == 0:
-        classes = [Class(i, clients_per_class) for i in range(classes_total)]
-    else:
-        classes = [Class(i, clients_per_class) for i in range(classes_total-1)]
-        classes.append(Class(classes_total - 1, clients_per_class_last))
+    remainder = (nc * k) % classes_total
+    classes = [Class(i, clients_per_class + int(i < remainder)) for i in range(classes_total)]
     clients = [Client(nc) for _ in range(k)]
     for i, (s, l) in enumerate(main_dataset):
         target_client, new_client_flag = find_available_client(clients, classes[l])
