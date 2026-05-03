@@ -39,4 +39,4 @@ def plot_training(run_name, logs_dir, save_dir=None):
 
 
 if __name__ == '__main__':
-    plot_training("debug_20260424_185552", "centralized_model/logs/", "../centralized_model/plots/")
+    plot_training("", "centralized_model/logs/", "centralized_model/plots/")

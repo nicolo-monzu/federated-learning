@@ -23,7 +23,7 @@ def visualize():
     # Get class names
     class_names = train_loader.dataset.dataset.classes
 
-    for i, data in enumerate(train_loader):
+    for data in train_loader:
         for img, label in zip(*data):
             if label.item() not in classes_sampled:
                 classes_sampled.append(label.item())

@@ -40,7 +40,7 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
 
     train_loss = running_loss / len(train_loader)
     train_accuracy = 100. * correct / total
-    print(f'Train Epoch: {epoch} Loss: {train_loss:.6f} Acc: {train_accuracy:.2f}%')
+    print(f'Train Epoch: {epoch} Loss: {train_loss:.6f} Acc: {train_accuracy:.2f}% Lr: {optimizer.param_groups[0]["lr"]:e}')
     return train_loss, train_accuracy
 
 
@@ -73,9 +73,10 @@ def validate(model, val_loader, criterion):
     return val_loss, val_accuracy
 
 
-def train(num_epochs, run_name, model, train_loader, val_loader, criterion, optimizer, logger, checkpoints_dir, best_acc, start_epoch=1):
+def train(num_epochs, run_name, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, best_acc, start_epoch=1):
     for epoch in range(start_epoch, num_epochs + 1):
         train_loss, train_acc = train_one_epoch(epoch, model, train_loader, criterion, optimizer)
+        scheduler.step()
 
         # At the end of each training iteration, perform a validation step
         val_loss, val_acc = validate(model, val_loader, criterion)
@@ -88,6 +89,7 @@ def train(num_epochs, run_name, model, train_loader, val_loader, criterion, opti
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
             'accuracy': val_acc
         }
         save(checkpoint, f'{checkpoints_dir}/{run_name}_last.pth')
@@ -139,8 +141,7 @@ def resume(run_name, num_epochs):
 
     if DEBUG:
         if not run['debug']:
-            print('Error: Attempted to resume in debug mode a non debug training')
-            exit()
+            exit('Error: Attempted to resume in debug mode a non debug training')
         print('Debug mode')
     print('Using device:', DEVICE)
 
@@ -152,21 +153,24 @@ def resume(run_name, num_epochs):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=run['scheduler_period'])
 
     #Restore state
     model.load_state_dict(last['model_state_dict'])
     optimizer.load_state_dict(last['optimizer_state_dict'])
+    scheduler.load_state_dict(last['scheduler_state_dict'])
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, logger, checkpoints_dir, best_acc, last['epoch']+1)
+    train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, best_acc, last['epoch']+1)
     plot_training(run['name'], logs_dir, plots_dir)
 
 def start(num_epochs):
     batch_size = 32
     learning_rate = 0.001
     weight_decay = 1e-4
+    scheduler_period = 10
 
     logs_dir='centralized_model/logs'
     checkpoints_dir = 'centralized_model/checkpoints/'
@@ -181,6 +185,8 @@ def start(num_epochs):
         'learning_rate': learning_rate,
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
+        'scheduler': 'CosineAnnealingLR',
+        'scheduler_period': scheduler_period,
         'best_accuracy': 0,
         'debug': DEBUG
     }
@@ -199,11 +205,12 @@ def start(num_epochs):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=scheduler_period)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, logger, checkpoints_dir, 0)
+    train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, 0)
     plot_training(run['name'], logs_dir, plots_dir)
 
 if __name__ == '__main__':
