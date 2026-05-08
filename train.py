@@ -3,6 +3,7 @@ from datetime import datetime
 
 import torch
 from torch import nn
+from SparseSGDM import SparseSGDM
 from data.dataloader import create_dataloaders
 from logger import Logger
 from plot import plot_training
@@ -31,7 +32,8 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
         loss = criterion(outputs, targets)
         optimizer.zero_grad()
         loss.backward()
-        optimizer.step()
+        masks = [torch.ones_like(param) for param in model.parameters()]
+        optimizer.step(masks)
 
         running_loss += loss.item()
         _, predicted = outputs.max(1)
@@ -152,7 +154,7 @@ def resume(run_name, num_epochs):
     model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16').to(DEVICE)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
+    optimizer = SparseSGDM(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=run['scheduler_period'])
 
     #Restore state
@@ -204,7 +206,7 @@ def start(num_epochs):
     model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16').to(DEVICE)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+    optimizer = SparseSGDM(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=scheduler_period)
 
     # Run the training process for {num_epochs} epochs
