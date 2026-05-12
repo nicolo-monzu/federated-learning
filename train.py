@@ -3,14 +3,23 @@ from datetime import datetime
 
 import torch
 from torch import nn
+from torchvision.transforms.v2 import MixUp, CutMix
 from data.dataloader import create_dataloaders
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
 
 DEBUG = False
-
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+NUM_CLASSES = 100
+
+mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
+cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
+
+def apply_mixup_cutmix(inputs, targets):
+    if torch.rand(1).item() < 0.5:
+        return mixup(inputs, targets)
+    return cutmix(inputs, targets)
 
 def save(checkpoint, filename):
     torch.save(checkpoint, filename+'.tmp')
@@ -27,14 +36,18 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
             if batch_idx > 1:
                 break
         inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+        inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
         outputs = model(inputs)
-        loss = criterion(outputs, targets)
+        # targets_mix are soft labels
+        loss = criterion(outputs, targets_mix)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         running_loss += loss.item()
+
+        # fixme: training accuracy uses original hard labels
         _, predicted = outputs.max(1)
         total += targets.size(0)
         correct += predicted.eq(targets).sum().item()
