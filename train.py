@@ -6,6 +6,7 @@ from torch import nn
 from data.dataloader import create_dataloaders
 from logger import Logger
 from plot import plot_training
+from models.model import Dino_vits16_100
 
 DEBUG = False
 
@@ -152,7 +153,7 @@ def resume(run_name, num_epochs):
     train_loader, val_loader = create_dataloaders(run['batch_size'])
 
     # Define model
-    model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16').to(DEVICE)
+    model = Dino_vits16_100().to(DEVICE)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
@@ -183,7 +184,7 @@ def start(num_epochs):
     # Init logger
     run = {
         'name': ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S'),
-        'model': 'dino_vits16_centralized',
+        'model': 'dino_vits16_100_centralized',
         'batch_size': batch_size,
         'learning_rate': learning_rate,
         'weight_decay': weight_decay,
@@ -204,7 +205,7 @@ def start(num_epochs):
     train_loader, val_loader = create_dataloaders(batch_size)
 
     # Define model
-    model = torch.hub.load('facebookresearch/dino:main', 'dino_vits16').to(DEVICE)
+    model = Dino_vits16_100().to(DEVICE)
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
