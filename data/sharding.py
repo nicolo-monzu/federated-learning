@@ -1,5 +1,4 @@
 from torch.utils.data import Subset
-import math
 import matplotlib.pyplot as plt
 from .sharding_classes import Class, Client, find_available_client
 
