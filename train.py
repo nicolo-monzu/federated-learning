@@ -3,6 +3,7 @@ from datetime import datetime
 
 import torch
 from torch import nn
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix
 from data.dataloader import create_dataloaders
 from logger import Logger
@@ -95,8 +96,7 @@ def train(num_epochs, run_name, model, train_loader, val_loader, criterion, opti
         val_loss, val_acc = validate(model, val_loader, criterion)
 
         #Update learning rate
-        if epoch < scheduler.T_max:
-            scheduler.step()
+        scheduler.step()
 
         # Log
         logger.log(epoch, train_loss, train_acc, val_loss, val_acc)
@@ -170,7 +170,19 @@ def resume(run_name, num_epochs):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=run['scheduler_T_max'])
+
+    # Scheduler
+    warmup_epochs = run['warmup_epochs']
+    cosine_epochs = run['cosine_epochs']
+    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+    cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_epochs)
+    constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 1.0)
+
+    scheduler = SequentialLR(
+        optimizer,
+        schedulers=[warmup_sched, cosine_sched, constant_sched],
+        milestones=[warmup_epochs, warmup_epochs + cosine_epochs]
+    )
 
     # Restore state
     model.load_state_dict(last['model_state_dict'])
@@ -184,10 +196,12 @@ def resume(run_name, num_epochs):
     plot_training(run['name'], logs_dir, plots_dir)
 
 def start(num_epochs):
-    batch_size = 32
+    batch_size = 32 if not DEBUG else 1
     learning_rate = 0.001
     weight_decay = 1e-4
-    scheduler_T_max = 10
+
+    warmup_epochs = 3
+    cosine_epochs = 7
 
     logs_dir = 'centralized_model/logs'
     checkpoints_dir = 'centralized_model/checkpoints/'
@@ -203,7 +217,8 @@ def start(num_epochs):
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
         'scheduler': 'CosineAnnealingLR',
-        'scheduler_T_max': scheduler_T_max,
+        'warmup_epochs' : warmup_epochs,
+        'cosine_epochs': cosine_epochs,
         'best_accuracy': 0,
         'debug': DEBUG
     }
@@ -222,7 +237,17 @@ def start(num_epochs):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=scheduler_T_max)
+
+    # Scheduler
+    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+    cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_epochs)
+    constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 1.0)
+
+    scheduler = SequentialLR(
+        optimizer,
+        schedulers=[warmup_sched, cosine_sched, constant_sched],
+        milestones=[warmup_epochs, warmup_epochs + cosine_epochs]
+    )
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
