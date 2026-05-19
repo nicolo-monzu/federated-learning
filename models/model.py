@@ -8,6 +8,9 @@ class Dino_vits16_100(nn.Module):
         # Define layers of the neural network
         self.backbone = torch.hub.load('facebookresearch/dino:main', 'dino_vits16')
         self.classifier = nn.Linear(self.backbone.embed_dim, 100)
+        # Initialize weights
+        nn.init.xavier_uniform_(self.classifier.weight)
+        nn.init.zeros_(self.classifier.bias)
 
     def forward(self, x):
         # Define forward pass
