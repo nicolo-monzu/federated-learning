@@ -26,7 +26,7 @@ class Logger:
             json.dump(self.run, f, indent=4, ensure_ascii=False)
         # Create log
         with open(self.log_path, 'w') as f:
-            f.write('epoch,train_loss,val_loss,train_acc,val_acc\n')
+            f.write('epoch,train_loss,val_loss,val_acc,lr\n')
 
 
     def resume(self, epoch, best_acc):

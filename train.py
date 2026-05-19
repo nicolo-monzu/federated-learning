@@ -29,8 +29,6 @@ def save(checkpoint, filename):
 def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
     model.train()
     running_loss = 0.0
-    correct = 0
-    total = 0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
         if DEBUG:
@@ -48,15 +46,10 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
 
         running_loss += loss.item()
 
-        # fixme: training accuracy uses original hard labels
-        _, predicted = outputs.max(1)
-        total += targets.size(0)
-        correct += predicted.eq(targets).sum().item()
-
     train_loss = running_loss / len(train_loader)
-    train_accuracy = 100. * correct / total
-    print(f'Train Epoch: {epoch} Loss: {train_loss:.6f} Acc: {train_accuracy:.2f}% Lr: {optimizer.param_groups[0]["lr"]:e}')
-    return train_loss, train_accuracy
+    lr = optimizer.param_groups[0]["lr"]
+    print(f'Train Epoch: {epoch} Loss: {train_loss:.6f} Lr: {lr:e}')
+    return train_loss, lr
 
 
 # Validation loop
@@ -90,7 +83,7 @@ def validate(model, val_loader, criterion):
 
 def train(num_epochs, run_name, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, best_acc, start_epoch=1):
     for epoch in range(start_epoch, num_epochs + 1):
-        train_loss, train_acc = train_one_epoch(epoch, model, train_loader, criterion, optimizer)
+        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer)
 
         # At the end of each training iteration, perform a validation step
         val_loss, val_acc = validate(model, val_loader, criterion)
@@ -99,7 +92,7 @@ def train(num_epochs, run_name, model, train_loader, val_loader, criterion, opti
         scheduler.step()
 
         # Log
-        logger.log(epoch, train_loss, train_acc, val_loss, val_acc)
+        logger.log(epoch, train_loss, val_loss, val_acc, lr)
 
         # Save last checkpoint
         checkpoint = {
