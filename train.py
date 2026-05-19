@@ -42,6 +42,7 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
         loss = criterion(outputs, targets_mix)
         optimizer.zero_grad()
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         optimizer.step()
 
         running_loss += loss.item()
@@ -117,6 +118,29 @@ def train(num_epochs, run_name, model, train_loader, val_loader, criterion, opti
 
     print(f'Best validation accuracy: {best_acc:.2f}%')
 
+def apply_llrd(model, learning_rate, decay_rate):
+    # Assign a lr to each layer
+
+    # classifier
+    param_groups = [{"params": model.classifier.parameters(), "lr": learning_rate}]
+
+    # norm
+    learning_rate *= decay_rate
+    param_groups.append({"params": list(model.backbone.norm.parameters()), "lr": learning_rate})
+
+    # blocks
+    for block in reversed(model.backbone.blocks):
+        learning_rate *= decay_rate
+        param_groups.append({"params": block.parameters(), "lr": learning_rate})
+
+    # pos_drop
+
+    # patch_embed
+    learning_rate *= decay_rate
+    param_groups.append({"params": model.backbone.patch_embed.parameters(), "lr": learning_rate})
+
+    return param_groups
+
 def resume(run_name, num_epochs):
     checkpoints_dir = 'centralized_model/checkpoints/'
     logs_dir = 'centralized_model/logs/'
@@ -161,8 +185,11 @@ def resume(run_name, num_epochs):
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
+    # Learning rate decaying
+    parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
+
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=run['learning_rate'], momentum=0.9, weight_decay=run['weight_decay'])
+    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
 
     # Scheduler
     warmup_epochs = run['warmup_epochs']
@@ -190,7 +217,8 @@ def resume(run_name, num_epochs):
 
 def start(num_epochs):
     batch_size = 32 if not DEBUG else 1
-    learning_rate = 0.001
+    max_lr = 0.001
+    decay_rate = 0.75
     weight_decay = 1e-4
 
     warmup_epochs = 3
@@ -206,10 +234,11 @@ def start(num_epochs):
         'name': ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S'),
         'model': 'dino_vits16_100_centralized',
         'batch_size': batch_size,
-        'learning_rate': learning_rate,
+        'max_learning_rate': max_lr,
+        'decay_rate': decay_rate,
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
-        'scheduler': 'CosineAnnealingLR',
+        'scheduler': 'CosineAnnealingLR with warm-up',
         'warmup_epochs' : warmup_epochs,
         'cosine_epochs': cosine_epochs,
         'best_accuracy': 0,
@@ -228,8 +257,11 @@ def start(num_epochs):
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
+    # Learning rate decaying
+    parameters = apply_llrd(model, max_lr, decay_rate)
+
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
+    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=weight_decay)
 
     # Scheduler
     warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)

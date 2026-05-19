@@ -12,15 +12,15 @@ def create_dataloaders(batch_size):
     dataset_dir = os.path.dirname(os.path.abspath(__file__))+"/../dataset"
 
     transform_train = T.Compose([
-        T.RandomResizedCrop(224, scale=(0.67, 1.0), interpolation=T.InterpolationMode.BICUBIC),
+        T.Resize(256, interpolation=T.InterpolationMode.BICUBIC),
+        T.RandomCrop(224),
         T.RandomHorizontalFlip(),
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet mean and std
     ])
 
     transform_val = T.Compose([
-        T.Resize(256, interpolation=T.InterpolationMode.BICUBIC),
-        T.CenterCrop(224),
+        T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet mean and std
     ])
