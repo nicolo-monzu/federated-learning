@@ -1,15 +1,9 @@
-import os
-from datetime import datetime
-
 import torch
-from torch import nn
-from logger import Logger
 
-DEBUG = False
-
+E = 3   # local epoch of each client
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-def train_client(model, train_dataloader, epochs):
+def train_client(model, train_dataloader):
     return
 
 """
