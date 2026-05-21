@@ -214,15 +214,14 @@ def resume(run_name, num_epochs):
     print('Resume training')
     train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, best_acc, last['epoch']+1)
     plot_training(run['name'], logs_dir, plots_dir)
+    return logger.get_run()
 
-def start(num_epochs):
-    batch_size = 32 if not DEBUG else 1
-    max_lr = 0.001
-    decay_rate = 0.75
-    weight_decay = 1e-4
+def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
+    warmup_epochs = 5
+    cosine_epochs = 35
 
-    warmup_epochs = 3
-    cosine_epochs = 7
+    if DEBUG:
+        batch_size = 1
 
     logs_dir = 'centralized_model/logs'
     checkpoints_dir = 'centralized_model/checkpoints/'
@@ -279,6 +278,8 @@ def start(num_epochs):
     print('Start training')
     train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, 0)
     plot_training(run['name'], logs_dir, plots_dir)
+    return logger.get_run()
 
 if __name__ == '__main__':
-    start(10 if not DEBUG else 1)
+    # start()
+    pass

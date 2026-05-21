@@ -24,7 +24,8 @@ def plot_training(run_name, logs_dir, save_dir=None):
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
         plt.savefig(f"{save_dir}/{run_name}_loss_plot")
-    plt.show()
+    else:
+        plt.show()
 
     # Accuracy
     plt.plot(epochs, val_acc, label='Val Accuracy')
@@ -36,7 +37,8 @@ def plot_training(run_name, logs_dir, save_dir=None):
 
     if save_dir:
         plt.savefig(f"{save_dir}/{run_name}_acc_plot")
-    plt.show()
+    else:
+        plt.show()
 
 
 if __name__ == '__main__':
