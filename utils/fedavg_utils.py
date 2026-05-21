@@ -1,4 +1,4 @@
-from torch.utils.data import Subset
+from torch.utils.data import Subset, Dataset
 from models.model import Dino_vits16_100
 import random
 import models
@@ -13,6 +13,14 @@ def selection_wrapper(clients: list[Subset]) -> (list[Subset], int, int):
     return selected_clients, samples_per_client, sum(samples_per_client) # m, [n0, n1, ..., nm-1], mt
 
 def get_initial_weights():
-    for layer in Dino_vits16_100:
-        layer
+    # for layer in Dino_vits16_100:
+    return None
 
+class SubsetToDataset(Dataset):
+    def __init__(self, subset: Subset):
+        self.data = subset.dataset.data[subset.indices]
+        self.targets = [subset.dataset.targets[x] for x in subset.indices]
+    def __getitem__(self, index):
+        return self.data[index], self.targets[index]
+    def __len__(self):
+        return self.data.shape[0]

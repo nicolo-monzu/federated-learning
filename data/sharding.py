@@ -1,19 +1,21 @@
 from torch.utils.data import Subset
 import matplotlib.pyplot as plt
-from .sharding_classes import Class, Client, find_available_client
+from data.sharding_classes import Class, Client, find_available_client
+from utils.fedavg_utils import SubsetToDataset
+import torchvision
 
 TESTING = True
-THRESHOLD = 20
+THRESHOLD = 5
 
-def testing_stuff(main_dataset, threshold) -> Subset:
+def testing_stuff(main_dataset, threshold) -> SubsetToDataset:
     indices_to_keep = [i for i, (_, l) in enumerate(main_dataset) if l < threshold]
-    return Subset(main_dataset, indices_to_keep)
+    return SubsetToDataset(Subset(main_dataset, indices_to_keep))
 
-def printing_stuff(sub_datasets: list[Subset], classes_total: int, mode: str, clients: int, nc: int=0) -> None:
+def printing_stuff(sub_datasets: list[Subset | SubsetToDataset], classes_total: int, mode: str, clients: int, nc: int=0) -> None:
     # print(f"\n\n{mode} MODE")
     counter_matrix = [[] for _ in range(clients)]
     for i, c in enumerate(sub_datasets):
-        # print(f"\nclient {i}")
+        # print(f"client {i}")
         counter_matrix[i] = [0 for _ in range(classes_total)]
         for s, l in c:
             counter_matrix[i][l] += 1
@@ -21,32 +23,31 @@ def printing_stuff(sub_datasets: list[Subset], classes_total: int, mode: str, cl
             # print("samples class " + str(j) + ": " + str(counter_matrix[i][j]))
 
     fig, ax = plt.subplots()
-    im = ax.imshow(counter_matrix, cmap="viridis_r")
+    ax.imshow(counter_matrix, cmap="viridis_r")
     ax.set_title(f"{mode}, clients: {clients}" + (", nc: " + str(nc) if mode.__contains__("non-iid") else ""))
     ax.set_xticks(range(classes_total), labels=[f"class {i}" for i in range(classes_total)],
                   rotation=45, ha="right", rotation_mode="anchor")
     ax.set_yticks(range(clients), labels=[f"client {i}" for i in range(clients)])
     for i in range(clients):
         for j in range(classes_total):
-            text = ax.text(j, i, counter_matrix[i][j],
-                           ha="center", va="center", color="w")
+            ax.text(j, i, counter_matrix[i][j], ha="center", va="center", color="w")
     fig.tight_layout()
     plt.show()
 
-def prevent_code_breaking(main_dataset: Subset, classes_total, k) -> Subset:
+def prevent_code_breaking(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, classes_total, k) -> SubsetToDataset:
     labels = [l for (_, l) in main_dataset]
     indices = [i for i in range(len(labels))]
     new_indices = []
-    for c in range(k):  # iterate thru clients
-        for l in range(classes_total):  # iterate thru classes
+    for c in range(k):  # iterate through clients
+        for l in range(classes_total):  # iterate through classes
             target_index = labels.index(l)
             new_indices.append(target_index)
             labels[target_index] = -1
             indices[target_index] = -1
-    return Subset(main_dataset, new_indices + [i for i in indices if i != -1])
+    return SubsetToDataset(Subset(main_dataset, new_indices + [i for i in indices if i != -1]))
 
 
-def iid_sharding(main_dataset: Subset, k: int):
+def iid_sharding(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, k: int):
     """
     each training subset has the same distribution among classes
 
@@ -58,14 +59,14 @@ def iid_sharding(main_dataset: Subset, k: int):
 
     classes_total = 1 + max([l for s, l in main_dataset])
     sub_datasets = []
-    counters = [0 for _ in range(classes_total)]    # each element represent the amount of samples of classes i encountered
+    counters = [0 for _ in range(classes_total)]    # each element represent the amount of samples of classes "i" encountered
     indices = [[] for _ in range(k)] # each list is a set of indices included in a client
     for i, (s, l) in enumerate(main_dataset):
         current_index = counters[l] % k
         indices[current_index].append(i)
         counters[l] += 1
     for clients in range(k):
-        sub_datasets.append(Subset(main_dataset, indices[clients]))
+        sub_datasets.append(SubsetToDataset(Subset(main_dataset, indices[clients])))
 
     if TESTING:
         printing_stuff(sub_datasets, classes_total, "iid", k)
@@ -97,7 +98,7 @@ def non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
     return sub_datasets
 """
 
-def advanced_non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
+def advanced_non_iid_sharding(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, k: int, nc: int) -> list[Subset | SubsetToDataset]:
     if TESTING:
         main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
@@ -108,7 +109,7 @@ def advanced_non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Sub
         print([l for (_, l) in main_dataset][:limit])
         print([l for (_, l) in main_dataset][limit:2*limit])
     if nc * k < classes_total:
-        print(f"combination of clients and classes per client cannot accomodate all classes! (Nc * k) < {classes_total}")
+        print(f"combination of clients and classes per client cannot accommodate all classes! (Nc * k) < {classes_total}")
         exit(0)
     if nc > classes_total:
         print(f"required classes in each client ({nc}) are more than total classes present in the dataset ({classes_total})")
@@ -124,7 +125,7 @@ def advanced_non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Sub
             classes[l].add_client(target_client)
         clients[target_client].add_index(i)
         classes[l].update_counter()
-    sub_datasets = [Subset(main_dataset, indices) for indices in [c.get_indices() for c in clients]]
+    sub_datasets = [SubsetToDataset(Subset(main_dataset, indices)) for indices in [c.get_indices() for c in clients]]
 
     if TESTING:
         printing_stuff(sub_datasets, classes_total, " advanced non-iid", k, nc)
