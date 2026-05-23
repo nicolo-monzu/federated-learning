@@ -1,9 +1,9 @@
 import torch
 
-E = 3   # local epoch of each client
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-def train_client(model, train_dataloader):
+def train_client(model, dataloader):
+    train, evalu = dataloader
     return
 
 """

@@ -39,7 +39,7 @@ def find_available_client(clients: list[Client], class_: Class) -> tuple[int, bo
     if len(class_.get_client_list()) == class_.get_max_clients():   # class already assigned to max number of clients
         return class_.get_client_list()[class_.get_counter()], False    # return client from list of client assigned to current class
     for id_, client in enumerate(clients):
-        if len(client.get_classes()) < client.get_max_classes() and class_.get_id() not in client.get_classes():    # if client can accomodate additional classes
+        if len(client.get_classes()) < client.get_max_classes() and class_.get_id() not in client.get_classes():    # if client can accommodate additional classes
             return id_, True
     print("error")
     return -2, False

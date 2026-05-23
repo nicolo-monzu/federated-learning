@@ -1,20 +1,30 @@
 from torch.utils.data import Subset, Dataset
-from models.model import Dino_vits16_100
 import random
-import models
+from torch.nn import Module
 
-C = 0.1 # fraction of clients
+C = 0.5 # fraction of clients
 K = 10  # clients
 
-def selection_wrapper(clients: list[Subset]) -> (list[Subset], int, int):
-    selected_indices = random.sample(range(len(clients)), int(max(C * K, 1)))
-    selected_clients = [clients[i] for i in selected_indices]
-    samples_per_client = [len(client_train) for client_train in selected_clients]
-    return selected_clients, samples_per_client, sum(samples_per_client) # m, [n0, n1, ..., nm-1], mt
 
-def get_initial_weights():
-    # for layer in Dino_vits16_100:
-    return None
+def calculate_client_contributions(w_local: list[dict], samples_selected: list[int], total_selected: int) -> dict:
+    # update weight of each client based on a contribution factor
+    for i in range(len(w_local)):
+        for layer in w_local[i]:
+            w_local[i][layer] = w_local[i][layer] * samples_selected[i] / total_selected
+
+    # sum weights of same layer in all clients
+    return {layer: layer_wise_addition(w_local, layer, len(w_local)) for layer in w_local[0]}
+
+def layer_wise_addition(w_local, layer, clients_amount):
+    s = w_local[0][layer]
+    for i in range(1, clients_amount):
+        s += w_local[i][layer]
+    return s
+
+def set_weights(model: Module, new_params: dict[str, list[float]]) -> Module:
+    for key in new_params.keys():
+        model.parameters()
+    return model
 
 class SubsetToDataset(Dataset):
     def __init__(self, subset: Subset):

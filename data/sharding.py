@@ -5,13 +5,14 @@ from utils.fedavg_utils import SubsetToDataset
 import torchvision
 
 TESTING = True
-THRESHOLD = 5
+THRESHOLD = 1
 
 def testing_stuff(main_dataset, threshold) -> SubsetToDataset:
+    print(f"SETUP: filtering only samples of the following classes: {[l for l in range(0, threshold)]}")
     indices_to_keep = [i for i, (_, l) in enumerate(main_dataset) if l < threshold]
     return SubsetToDataset(Subset(main_dataset, indices_to_keep))
 
-def printing_stuff(sub_datasets: list[Subset | SubsetToDataset], classes_total: int, mode: str, clients: int, nc: int=0) -> None:
+def printing_stuff(sub_datasets: list[SubsetToDataset], classes_total: int, mode: str, clients: int, nc: int=0) -> None:
     # print(f"\n\n{mode} MODE")
     counter_matrix = [[] for _ in range(clients)]
     for i, c in enumerate(sub_datasets):
@@ -47,13 +48,14 @@ def prevent_code_breaking(main_dataset: torchvision.datasets.CIFAR100 | SubsetTo
     return SubsetToDataset(Subset(main_dataset, new_indices + [i for i in indices if i != -1]))
 
 
-def iid_sharding(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, k: int):
+def iid_sharding(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, k: int) -> list[SubsetToDataset]:
     """
     each training subset has the same distribution among classes
 
     main_dataset: training dataset
     k: amount of federated learning clients
     """
+    print("SETUP: iid sharding started")
     if TESTING:
         main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
@@ -98,7 +100,7 @@ def non_iid_sharding(main_dataset: Subset, k: int, nc: int) -> list[Subset]:
     return sub_datasets
 """
 
-def advanced_non_iid_sharding(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, k: int, nc: int) -> list[Subset | SubsetToDataset]:
+def advanced_non_iid_sharding(main_dataset: torchvision.datasets.CIFAR100 | SubsetToDataset, k: int, nc: int) -> list[SubsetToDataset]:
     if TESTING:
         main_dataset = testing_stuff(main_dataset, THRESHOLD)
 
