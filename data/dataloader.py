@@ -34,6 +34,6 @@ def create_dataloaders(batch_size):
     # clients_advanced_non_iid = shard.advanced_non_iid_sharding(subset, k, nc)
 
     dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, transform=transform_val)
-    val_loader = DataLoader(Subset(dataset, val_idx), batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(Subset(dataset, val_idx), batch_size=batch_size, shuffle=False)
 
     return train_loader, val_loader

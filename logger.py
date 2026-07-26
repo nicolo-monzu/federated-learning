@@ -46,6 +46,6 @@ class Logger:
         os.replace(self.det_path+'.tmp', self.det_path)
 
 
-    def log(self, epoch, train_loss, train_acc, val_loss, val_acc):
+    def log(self, epoch, train_loss, val_loss, val_acc, lr):
         with open(self.log_path, 'a') as f:
-            f.write(f'{epoch},{train_loss},{val_loss},{train_acc},{val_acc}\n')
+            f.write(f'{epoch},{train_loss},{val_loss},{val_acc},{lr}\n')

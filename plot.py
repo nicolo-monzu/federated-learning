@@ -11,8 +11,8 @@ def plot_training(run_name, logs_dir, save_dir=None):
     train_loss, val_loss, val_acc = read(f"{logs_dir}/{run_name}_log.csv")
     epochs = range(1, len(train_loss) + 1)
 
-
     # Loss
+    plt.figure()
     plt.plot(epochs, train_loss, label='Train Loss')
     plt.plot(epochs, val_loss, label='Val Loss')
     plt.xlabel('Epochs')
@@ -28,6 +28,7 @@ def plot_training(run_name, logs_dir, save_dir=None):
         plt.show()
 
     # Accuracy
+    plt.figure()
     plt.plot(epochs, val_acc, label='Val Accuracy')
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')

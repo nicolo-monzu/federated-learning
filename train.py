@@ -1,4 +1,5 @@
 import os
+import sys
 from datetime import datetime
 
 import torch
@@ -126,7 +127,7 @@ def apply_llrd(model, learning_rate, decay_rate):
 
     # norm
     learning_rate *= decay_rate
-    param_groups.append({"params": list(model.backbone.norm.parameters()), "lr": learning_rate})
+    param_groups.append({"params": model.backbone.norm.parameters(), "lr": learning_rate})
 
     # blocks
     for block in reversed(model.backbone.blocks):
@@ -138,6 +139,15 @@ def apply_llrd(model, learning_rate, decay_rate):
     # patch_embed
     learning_rate *= decay_rate
     param_groups.append({"params": model.backbone.patch_embed.parameters(), "lr": learning_rate})
+
+    param_groups.append({"params": model.backbone.pos_embed, "lr": learning_rate})
+    param_groups.append({"params": model.backbone.cls_token, "lr": learning_rate})
+
+    #print(list(a for (a,_) in model.backbone.named_parameters()))
+    if DEBUG:
+        traced = sum(p.numel() for g in param_groups for p in g["params"])
+        total = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        assert traced == total, f"Error in LLRD, missing {total - traced} parameters."
 
     return param_groups
 
@@ -175,7 +185,7 @@ def resume(run_name, num_epochs):
 
     if DEBUG:
         if not run['debug']:
-            exit('Error: Attempted to resume in debug mode a non debug training')
+            sys.exit('Error: Attempted to resume in debug mode a non debug training')
         print('Debug mode')
     print('Using device:', DEVICE)
 
