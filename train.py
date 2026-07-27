@@ -151,6 +151,36 @@ def apply_llrd(model, learning_rate, decay_rate):
 
     return param_groups
 
+
+def build_training_objects(run):
+    # Import data
+    train_loader, val_loader = create_dataloaders(run['batch_size'])
+
+    # Define model
+    model = Dino_vits16_100().to(DEVICE)
+
+    # Learning rate decaying
+    parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
+
+    # Scheduler
+    warmup_epochs = run['warmup_epochs']
+    cosine_epochs = run['cosine_epochs']
+    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+    cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_epochs)
+    constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 1.0)
+
+    scheduler = SequentialLR(
+        optimizer,
+        schedulers=[warmup_sched, cosine_sched, constant_sched],
+        milestones=[warmup_epochs, warmup_epochs + cosine_epochs]
+    )
+
+    return train_loader, val_loader, model, criterion, optimizer, scheduler
+
+
 def resume(run_name, num_epochs):
     checkpoints_dir = 'centralized_model/checkpoints/'
     logs_dir = 'centralized_model/logs/'
@@ -189,30 +219,7 @@ def resume(run_name, num_epochs):
         print('Debug mode')
     print('Using device:', DEVICE)
 
-    # Import data
-    train_loader, val_loader = create_dataloaders(run['batch_size'])
-
-    # Define model
-    model = Dino_vits16_100().to(DEVICE)
-
-    # Learning rate decaying
-    parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
-
-    # Scheduler
-    warmup_epochs = run['warmup_epochs']
-    cosine_epochs = run['cosine_epochs']
-    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
-    cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_epochs)
-    constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 1.0)
-
-    scheduler = SequentialLR(
-        optimizer,
-        schedulers=[warmup_sched, cosine_sched, constant_sched],
-        milestones=[warmup_epochs, warmup_epochs + cosine_epochs]
-    )
+    train_loader, val_loader, model, criterion, optimizer, scheduler = build_training_objects(run)
 
     # Restore state
     model.load_state_dict(last['model_state_dict'])
@@ -260,28 +267,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         print('Debug mode')
     print('Using device:', DEVICE)
 
-    # Import data
-    train_loader, val_loader = create_dataloaders(batch_size)
-
-    # Define model
-    model = Dino_vits16_100().to(DEVICE)
-
-    # Learning rate decaying
-    parameters = apply_llrd(model, max_lr, decay_rate)
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=weight_decay)
-
-    # Scheduler
-    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
-    cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_epochs)
-    constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 1.0)
-
-    scheduler = SequentialLR(
-        optimizer,
-        schedulers=[warmup_sched, cosine_sched, constant_sched],
-        milestones=[warmup_epochs, warmup_epochs + cosine_epochs]
-    )
+    train_loader, val_loader, model, criterion, optimizer, scheduler = build_training_objects(run)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
