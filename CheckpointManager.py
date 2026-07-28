@@ -1,3 +1,5 @@
+import random
+import numpy as np
 import torch
 import os
 
@@ -26,7 +28,12 @@ class CheckpointManager:
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
-            'accuracy': val_acc
+            'accuracy': val_acc,
+            # RNG states
+            'torch_rng_state': torch.get_rng_state(),
+            'python_rng_state': random.getstate(),
+            'numpy_rng_state': np.random.get_state(),
+            'cuda_rng_state': torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
         }
         # Save last checkpoint
         save(checkpoint, self.last_path)
@@ -66,4 +73,10 @@ class CheckpointManager:
         model.load_state_dict(self.loaded['model_state_dict'])
         optimizer.load_state_dict(self.loaded['optimizer_state_dict'])
         scheduler.load_state_dict(self.loaded['scheduler_state_dict'])
+        torch.set_rng_state(self.loaded["torch_rng_state"])
+        random.setstate(self.loaded["python_rng_state"])
+        np.random.set_state(self.loaded["numpy_rng_state"])
+        if self.loaded["cuda_rng_state"] is not None and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(self.loaded["cuda_rng_state"])
+
         self.loaded = None # Free memory
