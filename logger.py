@@ -11,10 +11,11 @@ def truncate_file(filepath, n):
     os.replace(filepath+'.tmp', filepath)
 
 class Logger:
-    def __init__(self, log_dir, run_name):
-        os.makedirs(log_dir, exist_ok=True)
-        self.log_path = f'{log_dir}/{run_name}_log.csv'
-        self.det_path = f'{log_dir}/{run_name}.json'
+    def __init__(self, directory, run_name):
+        os.makedirs(directory, exist_ok=True)
+        self.log_path = f'{directory}/{run_name}_log.csv'
+        self.det_path = f'{directory}/{run_name}.json'
+        self.run = None
 
     def get_run(self):
         return self.run

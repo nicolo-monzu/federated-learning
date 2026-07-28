@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix
+from CheckpointManager import CheckpointManager
 from data.dataloader import create_dataloaders
 from logger import Logger
 from plot import plot_training
@@ -22,10 +23,6 @@ def apply_mixup_cutmix(inputs, targets):
     if torch.rand(1).item() < 0.5:
         return mixup(inputs, targets)
     return cutmix(inputs, targets)
-
-def save(checkpoint, filename):
-    torch.save(checkpoint, filename+'.tmp')
-    os.replace(filename+'.tmp', filename)
 
 def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
     model.train()
@@ -83,36 +80,26 @@ def validate(model, val_loader, criterion):
     return val_loss, val_accuracy
 
 
-def train(num_epochs, run_name, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, best_acc, start_epoch=1):
+def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, best_acc, start_epoch=1):
     for epoch in range(start_epoch, num_epochs + 1):
         train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer)
 
         # At the end of each training iteration, perform a validation step
         val_loss, val_acc = validate(model, val_loader, criterion)
 
-        #Update learning rate
+        # Update learning rate
         scheduler.step()
 
         # Log
         logger.log(epoch, train_loss, val_loss, val_acc, lr)
 
-        # Save last checkpoint
-        checkpoint = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict(),
-            'accuracy': val_acc
-        }
-        save(checkpoint, f'{checkpoints_dir}/{run_name}_last.pth')
+        # Checkpoint
+        manager.save(epoch, model, optimizer, scheduler, val_acc)
 
-        # If it is the best model
-        if val_acc > best_acc or epoch == 1:
-            # Update best accuracy
+        # Update best accuracy
+        if val_acc > best_acc:
             best_acc = val_acc
             logger.update_best_acc(best_acc)
-            # Save best checkpoint
-            save(checkpoint, f'{checkpoints_dir}/{run_name}_best.pth')
 
         if hasattr(os, 'sync'):
             os.sync()
@@ -186,28 +173,12 @@ def resume(run_name, num_epochs):
     logs_dir = 'centralized_model/logs/'
     plots_dir = 'centralized_model/plots/'
 
-    # delete temp files
-    try:
-        os.remove(f'{checkpoints_dir}/{run_name}_last.pth.tmp')
-    except FileNotFoundError:
-        pass
+    # Cleanup and checkpoint loading
+    manager = CheckpointManager(checkpoints_dir, run_name)
+    epoch, best_acc = manager.resume()
 
-    try:
-        os.remove(f'{checkpoints_dir}/{run_name}_best.pth.tmp')
-    except FileNotFoundError:
-        pass
-
-
-    last = torch.load(f'{checkpoints_dir}/{run_name}_last.pth')
-    best = torch.load(f'{checkpoints_dir}/{run_name}_best.pth')
-
-    # update best checkpoint
-    if last['accuracy'] > best['accuracy']:
-        save(last, f'{checkpoints_dir}/{run_name}_best.pth')
-
-    best_acc = max(last['accuracy'], best['accuracy'])
-    logger = Logger(log_dir=logs_dir, run_name=run_name)
-    logger.resume(last['epoch'], best_acc)
+    logger = Logger(logs_dir, run_name)
+    logger.resume(epoch, best_acc)
     run = logger.get_run()
 
     if hasattr(os, 'sync'):
@@ -222,14 +193,12 @@ def resume(run_name, num_epochs):
     train_loader, val_loader, model, criterion, optimizer, scheduler = build_training_objects(run)
 
     # Restore state
-    model.load_state_dict(last['model_state_dict'])
-    optimizer.load_state_dict(last['optimizer_state_dict'])
-    scheduler.load_state_dict(last['scheduler_state_dict'])
+    manager.restore_state(model, optimizer, scheduler)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, best_acc, last['epoch']+1)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, best_acc, epoch+1)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
@@ -242,10 +211,9 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
 
     logs_dir = 'centralized_model/logs'
     checkpoints_dir = 'centralized_model/checkpoints/'
-    os.makedirs(checkpoints_dir, exist_ok=True)
     plots_dir = 'centralized_model/plots/'
 
-    # Init logger
+    # Init checkpoint manager and logger
     run = {
         'name': ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S'),
         'model': 'dino_vits16_100_centralized',
@@ -260,7 +228,8 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         'best_accuracy': 0,
         'debug': DEBUG
     }
-    logger = Logger(log_dir=logs_dir, run_name=run['name'])
+    manager = CheckpointManager(checkpoints_dir, run['name'])
+    logger = Logger(logs_dir, run['name'])
     logger.start(run)
 
     if DEBUG:
@@ -272,7 +241,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, run['name'], model, train_loader, val_loader, criterion, optimizer, scheduler, logger, checkpoints_dir, 0)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, 0)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
