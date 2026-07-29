@@ -1,9 +1,7 @@
 import os
-import random
 import sys
 from datetime import datetime
 
-import numpy as np
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
@@ -17,13 +15,6 @@ from models.model import Dino_vits16_100
 DEBUG = False
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_CLASSES = 100
-SEED = 1234
-
-torch.manual_seed(SEED)
-random.seed(SEED)
-np.random.seed(SEED)
-if torch.cuda.is_available():
-    torch.cuda.manual_seed_all(SEED)
 
 mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
 cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
