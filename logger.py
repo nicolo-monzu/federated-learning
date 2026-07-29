@@ -1,14 +1,6 @@
 import json
+import csv
 import os
-
-
-def truncate_file(filepath, n):
-    with open(filepath, 'r') as f:
-        lines = [next(f) for _ in range(n)]
-
-    with open(filepath+'.tmp', 'w') as f:
-        f.writelines(lines)
-    os.replace(filepath+'.tmp', filepath)
 
 class Logger:
     def __init__(self, directory, run_name):
@@ -16,37 +8,62 @@ class Logger:
         self.log_path = f'{directory}/{run_name}_log.csv'
         self.det_path = f'{directory}/{run_name}.json'
         self.run = None
+        self.logs = None
 
     def get_run(self):
         return self.run
 
+    def get_best_accuracy(self):
+        return self.run['best_accuracy']
+
     def start(self, run):
         self.run = run
-        # Create json
+        self.logs = [['epoch', 'train_loss', 'val_loss', 'val_acc', 'lr']]
+
+        # Create json file
         with open(self.det_path, 'w') as f:
             json.dump(self.run, f, indent=4, ensure_ascii=False)
-        # Create log
-        with open(self.log_path, 'w') as f:
-            f.write('epoch,train_loss,val_loss,val_acc,lr\n')
+
+        # Create log file
+        with open(self.log_path, 'w', newline='') as f:
+            csv.writer(f).writerow(self.logs[0])
 
 
-    def resume(self, epoch, best_acc):
-        with open(self.det_path, 'r') as f:
-            self.run = json.load(f)
-        # Restore json
-        self.update_best_acc(best_acc)
-        # Restore log
-        truncate_file(self.log_path, epoch+1)
+    def state_dict(self):
+        return {
+            'run': self.run,
+            'log': self.logs,
+        }
 
+    def resume(self, state_dict):
+        self.run = state_dict['run']
+        self.logs = state_dict['log']
 
-    def update_best_acc(self, best_acc):
-        self.run['best_accuracy'] = best_acc
-        # Update json
-        with open(self.det_path+'.tmp', 'w') as f:
+        # Restore log file
+        with open(self.log_path + '.tmp', 'w', newline='') as f:
+            csv.writer(f).writerows(self.logs)
+        os.replace(self.log_path + '.tmp', self.log_path)
+
+        # Restore json file
+        with open(self.det_path + '.tmp', 'w') as f:
             json.dump(self.run, f, indent=4, ensure_ascii=False)
-        os.replace(self.det_path+'.tmp', self.det_path)
+        os.replace(self.det_path + '.tmp', self.det_path)
 
 
     def log(self, epoch, train_loss, val_loss, val_acc, lr):
-        with open(self.log_path, 'a') as f:
-            f.write(f'{epoch},{train_loss},{val_loss},{val_acc},{lr}\n')
+        self.logs.append([epoch, train_loss, val_loss, val_acc, lr])
+
+        self.run['total_epochs'] = epoch
+        if val_acc > self.run['best_accuracy']:
+            self.run['best_epoch'] = epoch
+            self.run['best_accuracy'] = val_acc
+
+        # Update log file
+        with open(self.log_path, 'a', newline='') as f:
+            csv.writer(f).writerow(self.logs[-1])
+
+        # Update json file
+        with open(self.det_path + '.tmp', 'w') as f:
+            json.dump(self.run, f, indent=4, ensure_ascii=False)
+        os.replace(self.det_path + '.tmp', self.det_path)
+

@@ -20,12 +20,13 @@ class CheckpointManager:
             # Save best checkpoint
             save(checkpoint, self.best_path)
 
-    def save(self, epoch, model, optimizer, scheduler, val_acc):
+    def save(self, epoch, model, optimizer, scheduler, logger, val_acc):
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
+            'logger_state_dict': logger.state_dict(),
             'accuracy': val_acc
         }
         # Save last checkpoint
@@ -57,7 +58,7 @@ class CheckpointManager:
         # Evaluate if the resumed 'last' epoch is a new best
         self._save_if_best(last, last['accuracy'])
 
-        return last['epoch'], self.best_acc
+        return last['logger_state_dict'], last['epoch']
 
 
     def restore_state(self, model, optimizer, scheduler):

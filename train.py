@@ -6,7 +6,7 @@ import torch
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix
-from CheckpointManager import CheckpointManager
+from checkpoint_manager import CheckpointManager
 from data.dataloader import create_dataloaders
 from logger import Logger
 from plot import plot_training
@@ -80,7 +80,7 @@ def validate(model, val_loader, criterion):
     return val_loss, val_accuracy
 
 
-def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, best_acc, start_epoch=1):
+def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, start_epoch=1):
     for epoch in range(start_epoch, num_epochs + 1):
         train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer)
 
@@ -94,17 +94,12 @@ def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, sch
         logger.log(epoch, train_loss, val_loss, val_acc, lr)
 
         # Checkpoint
-        manager.save(epoch, model, optimizer, scheduler, val_acc)
-
-        # Update best accuracy
-        if val_acc > best_acc:
-            best_acc = val_acc
-            logger.update_best_acc(best_acc)
+        manager.save(epoch, model, optimizer, scheduler, logger, val_acc)
 
         if hasattr(os, 'sync'):
             os.sync()
 
-    print(f'Best validation accuracy: {best_acc:.2f}%')
+    print(f'Best validation accuracy: {logger.get_best_accuracy():.2f}%')
 
 def apply_llrd(model, learning_rate, decay_rate):
     # Assign a lr to each layer
@@ -175,10 +170,10 @@ def resume(run_name, num_epochs):
 
     # Cleanup and checkpoint loading
     manager = CheckpointManager(checkpoints_dir, run_name)
-    epoch, best_acc = manager.resume()
+    logger_state_dict, epoch = manager.resume()
 
     logger = Logger(logs_dir, run_name)
-    logger.resume(epoch, best_acc)
+    logger.resume(logger_state_dict)
     run = logger.get_run()
 
     if hasattr(os, 'sync'):
@@ -198,7 +193,7 @@ def resume(run_name, num_epochs):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, best_acc, epoch+1)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, epoch + 1)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
@@ -225,7 +220,9 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         'scheduler': 'CosineAnnealingLR with warm-up',
         'warmup_epochs' : warmup_epochs,
         'cosine_epochs': cosine_epochs,
-        'best_accuracy': 0,
+        'total_epochs': -1,
+        'best_epoch': -1,
+        'best_accuracy': -1.0,
         'debug': DEBUG
     }
     manager = CheckpointManager(checkpoints_dir, run['name'])
@@ -241,7 +238,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, 0)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
