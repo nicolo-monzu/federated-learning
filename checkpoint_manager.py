@@ -8,57 +8,49 @@ def save(checkpoint, filename):
 class CheckpointManager:
     def __init__(self, directory, run_name):
         os.makedirs(directory, exist_ok=True)
-        self.last_path = f'{directory}/{run_name}_last.pth'
-        self.best_path = f'{directory}/{run_name}_best.pth'
-        self.best_acc = -1 # Accuracy of the best checkpoint (-1 if it doesn't exist)
+        self.path = f'{directory}/{run_name}.pth'
+        self.best_acc = -1.0
+        self.best_model_state_dict = None
         self.loaded = None
 
-    def _save_if_best(self, checkpoint, accuracy):
-        if accuracy > self.best_acc:
-            # Update best accuracy
-            self.best_acc = accuracy
-            # Save best checkpoint
-            save(checkpoint, self.best_path)
-
     def save(self, epoch, model, optimizer, scheduler, logger, val_acc):
+        # Update if best model
+        if val_acc > self.best_acc:
+            self.best_acc = val_acc
+            self.best_model_state_dict = {
+                k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+            }
+
         checkpoint = {
+            # Last
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
             'logger_state_dict': logger.state_dict(),
-            'accuracy': val_acc
+            'accuracy': val_acc,
+            # Best
+            'best_model_state_dict': self.best_model_state_dict,
+            'best_accuracy': self.best_acc
         }
-        # Save last checkpoint
-        save(checkpoint, self.last_path)
-
-        # Conditionally save best checkpoint
-        self._save_if_best(checkpoint, val_acc)
+        save(checkpoint, self.path)
 
 
     def resume(self):
-        # Delete temp files
-        for path in [self.last_path, self.best_path]:
-            try:
-                os.remove(path + '.tmp')
-            except FileNotFoundError:
-                pass
-
-        # Load last checkpoint
-        last = torch.load(self.last_path)
-        self.loaded = last
-
-        # Load best checkpoint's accuracy if it exists
+        # Delete temp file if exist
         try:
-            best = torch.load(self.best_path)
-            self.best_acc = best['accuracy']
+            os.remove(self.path + '.tmp')
         except FileNotFoundError:
             pass
 
-        # Evaluate if the resumed 'last' epoch is a new best
-        self._save_if_best(last, last['accuracy'])
+        # Load checkpoint
+        checkpoint = torch.load(self.path)
+        self.loaded = checkpoint
 
-        return last['logger_state_dict'], last['epoch']
+        self.best_acc = checkpoint['best_accuracy']
+        self.best_model_state_dict = checkpoint['best_model_state_dict']
+
+        return checkpoint['logger_state_dict'], checkpoint['epoch']
 
 
     def restore_state(self, model, optimizer, scheduler):

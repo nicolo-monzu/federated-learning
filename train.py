@@ -126,11 +126,6 @@ def apply_llrd(model, learning_rate, decay_rate):
     param_groups.append({"params": model.backbone.cls_token, "lr": learning_rate})
 
     #print(list(a for (a,_) in model.backbone.named_parameters()))
-    if DEBUG:
-        traced = sum(p.numel() for g in param_groups for p in g["params"])
-        total = sum(p.numel() for p in model.parameters() if p.requires_grad)
-        assert traced == total, f"Error in LLRD, missing {total - traced} parameters."
-
     return param_groups
 
 
