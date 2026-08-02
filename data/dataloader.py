@@ -2,7 +2,7 @@ import torchvision
 import torchvision.transforms as T
 from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import train_test_split
-import data.sharding as shard
+# import data.sharding as shard
 import os
 
 k=3
