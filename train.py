@@ -1,4 +1,3 @@
-import os
 import sys
 from datetime import datetime
 
@@ -7,13 +6,12 @@ from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix
 from checkpoint_manager import CheckpointManager
-from data.dataloader import create_dataloaders
+from data.dataloader import create_dataloaders, DEVICE
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
 
 DEBUG = False
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 USE_AMP = DEVICE == "cuda"
 NUM_CLASSES = 100
 
@@ -30,10 +28,10 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
     running_loss = 0.0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-        if DEBUG:
-            if batch_idx > 1:
-                break
-        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+        if DEBUG and batch_idx > 1:
+            break
+
+        inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
         inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
         with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
@@ -64,10 +62,10 @@ def validate(model, val_loader, criterion):
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
-            if DEBUG:
-                if batch_idx > 1:
-                    break
-            inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+            if DEBUG and batch_idx > 1:
+                break
+
+            inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
 
             with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
                 outputs = model(inputs)
@@ -101,8 +99,6 @@ def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, sca
         # Checkpoint
         manager.save(epoch, model, optimizer, scaler, scheduler, logger, val_acc)
 
-        if hasattr(os, 'sync'):
-            os.sync()
 
     print(f'Best validation accuracy: {logger.get_best_accuracy():.2f}%')
 
@@ -177,9 +173,6 @@ def resume(run_name, num_epochs):
     logger.resume(logger_state_dict)
     run = logger.get_run()
 
-    if hasattr(os, 'sync'):
-        os.sync()
-
     if DEBUG:
         if not run['debug']:
             sys.exit('Error: Attempted to resume in debug mode a non debug training')
@@ -221,7 +214,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         'scheduler': 'CosineAnnealingLR with warm-up',
         'warmup_epochs' : warmup_epochs,
         'cosine_epochs': cosine_epochs,
-        'total_epochs': -1,
+        'total_epochs': 0,
         'best_epoch': -1,
         'best_accuracy': -1.0,
         'debug': DEBUG

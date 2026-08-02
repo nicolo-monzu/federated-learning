@@ -18,7 +18,7 @@ class CheckpointManager:
         if val_acc > self.best_acc:
             self.best_acc = val_acc
             self.best_model_state_dict = {
-                k: v.detach().cpu().clone() for k, v in model.state_dict().items()
+                k: v.detach().to('cpu', copy=True) for k, v in model.state_dict().items()
             }
 
         checkpoint = {
