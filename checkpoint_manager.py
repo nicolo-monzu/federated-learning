@@ -13,7 +13,7 @@ class CheckpointManager:
         self.best_model_state_dict = None
         self.loaded = None
 
-    def save(self, epoch, model, optimizer, scheduler, logger, val_acc):
+    def save(self, epoch, model, optimizer, scaler, scheduler, logger, val_acc):
         # Update if best model
         if val_acc > self.best_acc:
             self.best_acc = val_acc
@@ -26,6 +26,7 @@ class CheckpointManager:
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scaler_state_dict': scaler.state_dict(),
             'scheduler_state_dict': scheduler.state_dict(),
             'logger_state_dict': logger.state_dict(),
             'accuracy': val_acc,
@@ -53,10 +54,11 @@ class CheckpointManager:
         return checkpoint['logger_state_dict'], checkpoint['epoch']
 
 
-    def restore_state(self, model, optimizer, scheduler):
+    def restore_state(self, model, optimizer, scaler, scheduler):
         if self.loaded is None:
             raise RuntimeError("No checkpoint loaded to restore state from.")
         model.load_state_dict(self.loaded['model_state_dict'])
         optimizer.load_state_dict(self.loaded['optimizer_state_dict'])
+        scaler.load_state_dict(self.loaded['scaler_state_dict'])
         scheduler.load_state_dict(self.loaded['scheduler_state_dict'])
         self.loaded = None # Free memory
