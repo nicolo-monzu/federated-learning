@@ -1,4 +1,3 @@
-import os
 import sys
 from datetime import datetime
 
@@ -7,13 +6,13 @@ from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix
 from checkpoint_manager import CheckpointManager
-from data.dataloader import create_dataloaders
+from data.dataloader import create_dataloaders, DEVICE
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
 
 DEBUG = False
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+USE_AMP = DEVICE == "cuda"
 NUM_CLASSES = 100
 
 mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
@@ -24,24 +23,27 @@ def apply_mixup_cutmix(inputs, targets):
         return mixup(inputs, targets)
     return cutmix(inputs, targets)
 
-def train_one_epoch(epoch, model, train_loader, criterion, optimizer):
+def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
     model.train()
     running_loss = 0.0
 
     for batch_idx, (inputs, targets) in enumerate(train_loader):
-        if DEBUG:
-            if batch_idx > 1:
-                break
-        inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+        if DEBUG and batch_idx > 1:
+            break
+
+        inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
         inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
-        outputs = model(inputs)
-        # targets_mix are soft labels
-        loss = criterion(outputs, targets_mix)
+        with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
+            outputs = model(inputs)
+            loss = criterion(outputs, targets_mix)
+
         optimizer.zero_grad()
-        loss.backward()
+        scaler.scale(loss).backward()
+        scaler.unscale_(optimizer)
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-        optimizer.step()
+        scaler.step(optimizer)
+        scaler.update()
 
         running_loss += loss.item()
 
@@ -60,13 +62,14 @@ def validate(model, val_loader, criterion):
 
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
-            if DEBUG:
-                if batch_idx > 1:
-                    break
-            inputs, targets = inputs.to(DEVICE), targets.to(DEVICE)
+            if DEBUG and batch_idx > 1:
+                break
 
-            outputs = model(inputs)
-            loss = criterion(outputs, targets)
+            inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
+
+            with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
 
             val_loss += loss.item()
             _, predicted = outputs.max(1)
@@ -80,9 +83,9 @@ def validate(model, val_loader, criterion):
     return val_loss, val_accuracy
 
 
-def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, start_epoch=1):
+def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, start_epoch=1):
     for epoch in range(start_epoch, num_epochs + 1):
-        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer)
+        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler)
 
         # At the end of each training iteration, perform a validation step
         val_loss, val_acc = validate(model, val_loader, criterion)
@@ -94,10 +97,8 @@ def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, sch
         logger.log(epoch, train_loss, val_loss, val_acc, lr)
 
         # Checkpoint
-        manager.save(epoch, model, optimizer, scheduler, logger, val_acc)
+        manager.save(epoch, model, optimizer, scaler, scheduler, logger, val_acc)
 
-        if hasattr(os, 'sync'):
-            os.sync()
 
     print(f'Best validation accuracy: {logger.get_best_accuracy():.2f}%')
 
@@ -141,6 +142,7 @@ def build_training_objects(run):
 
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
+    scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
     # Scheduler
     warmup_epochs = run['warmup_epochs']
@@ -155,7 +157,7 @@ def build_training_objects(run):
         milestones=[warmup_epochs, warmup_epochs + cosine_epochs]
     )
 
-    return train_loader, val_loader, model, criterion, optimizer, scheduler
+    return train_loader, val_loader, model, criterion, optimizer, scaler, scheduler
 
 
 def resume(run_name, num_epochs):
@@ -171,24 +173,21 @@ def resume(run_name, num_epochs):
     logger.resume(logger_state_dict)
     run = logger.get_run()
 
-    if hasattr(os, 'sync'):
-        os.sync()
-
     if DEBUG:
         if not run['debug']:
             sys.exit('Error: Attempted to resume in debug mode a non debug training')
         print('Debug mode')
     print('Using device:', DEVICE)
 
-    train_loader, val_loader, model, criterion, optimizer, scheduler = build_training_objects(run)
+    train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run)
 
     # Restore state
-    manager.restore_state(model, optimizer, scheduler)
+    manager.restore_state(model, optimizer, scaler, scheduler)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager, epoch + 1)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, epoch + 1)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
@@ -215,7 +214,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         'scheduler': 'CosineAnnealingLR with warm-up',
         'warmup_epochs' : warmup_epochs,
         'cosine_epochs': cosine_epochs,
-        'total_epochs': -1,
+        'total_epochs': 0,
         'best_epoch': -1,
         'best_accuracy': -1.0,
         'debug': DEBUG
@@ -228,12 +227,12 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         print('Debug mode')
     print('Using device:', DEVICE)
 
-    train_loader, val_loader, model, criterion, optimizer, scheduler = build_training_objects(run)
+    train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scheduler, logger, manager)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
