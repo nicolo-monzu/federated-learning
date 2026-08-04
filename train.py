@@ -12,7 +12,7 @@ from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
 
-DEBUG = True
+DEBUG = False
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_CLASSES = 100
 

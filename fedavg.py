@@ -1,17 +1,18 @@
+from fedavg_logger import FEDAVGLogger
 from train import DEVICE
-from fedavg_utils import calculate_client_contributions, C, K, LOSS_CRITERION
-from torch.optim import SGD
+from fedavg_utils import calculate_client_contributions, C, K, LOSS_CRITERION, eval_phase
 from models.model import Dino_vits16_100
 from torch.utils.data import DataLoader
 from torch import save
 import random
 from copy import deepcopy
-from torch.optim.lr_scheduler import CosineAnnealingLR
+
 
 FEDAVG_WEIGHTS_PATH = "fedavg_weights.pth"
 
 
-def FedAvg(model: Dino_vits16_100, t_dataloaders: list[DataLoader], samples_dataloaders: list[int], local_steps: int, rounds: int):
+def FedAvg(model: Dino_vits16_100, t_dataloaders: list[DataLoader], samples_dataloaders: list[int], logger: FEDAVGLogger) -> str:
+    rounds = logger.get_hyperparameters().get_rounds()
     print("[FEDAVG] - w0 acquired")
     w_global = model.state_dict()   # get initial weights and biases
     for round_ in range(rounds):
@@ -24,12 +25,10 @@ def FedAvg(model: Dino_vits16_100, t_dataloaders: list[DataLoader], samples_data
         total_selected = sum(samples_selected)
         print(f"\n[ROUND {round_}/{rounds-1}] - CLIENT SELECTION: {selected_indices}, samples: {samples_selected}, total {total_selected}")
         # local training in each client
-        i = 0
         w_local = []
-        for client_dataloader in selected_dataloaders:
+        for i, client_dataloader in enumerate(selected_dataloaders):
             print(f"\t[CLIENT {i}/{len(selected_dataloaders) - 1}]")
-            i += 1
-            w_local.append(ClientUpdate(client_dataloader, deepcopy(model), local_steps))
+            w_local.append(ClientUpdate(client_dataloader, deepcopy(model), logger, (round_, selected_indices[i])))
 
         # scale weights on each client based on contribution and sum them all layer-wise
         print(f"[ROUND {round_}/{rounds-1}] - SERVER UPDATE: calculating client contributions")
@@ -37,14 +36,19 @@ def FedAvg(model: Dino_vits16_100, t_dataloaders: list[DataLoader], samples_data
         print(f"[ROUND {round_}/{rounds-1}] - SERVER UPDATE: global parameters updated")
         model.load_state_dict(w_global)
 
+
+    logger.add_weights(w_global)
     print("\n[FEDAVG] - terminated")
     save(w_global, FEDAVG_WEIGHTS_PATH)
     return FEDAVG_WEIGHTS_PATH
 
 
-def ClientUpdate(client_dataloader: DataLoader, model: Dino_vits16_100, local_steps: int) -> dict:
-    optimizer = SGD(model.parameters())  # , momentum=0.9, weight_decay=WEIGHT_DECAY)
-    CosineAnnealingLR(optimizer)
+def ClientUpdate(client_dataloader: DataLoader, model: Dino_vits16_100, logger: FEDAVGLogger, round_and_client: tuple[int, int]) -> dict:
+    local_steps = logger.get_hyperparameters().get_local_steps()
+    scheduler = logger.get_scheduler()
+    round_idx = round_and_client[0]
+    client_idx = round_and_client[1]
+    logger.get_round_results(round_idx).add(client_idx)
     for epoch in range(local_steps):
         print(f"\t\t[LOCAL EPOCH {epoch}/{local_steps-1}]")
         for batch, (img, trg) in enumerate(client_dataloader):
@@ -52,6 +56,7 @@ def ClientUpdate(client_dataloader: DataLoader, model: Dino_vits16_100, local_st
             img, trg = img.to(DEVICE), trg.to(DEVICE)
             pred = model(img)
             loss = LOSS_CRITERION(pred, trg)
+            logger.get_round_results(round_idx).get_client_results()[-1].add_client_results(loss)
             loss.backward()
-            optimizer.step()
+            scheduler.step()
     return model.state_dict()

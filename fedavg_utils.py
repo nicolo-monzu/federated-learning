@@ -1,20 +1,26 @@
 from sklearn.model_selection import train_test_split
-from torch.nn import CrossEntropyLoss
-from torch.utils.data import Subset, Dataset, DataLoader
+from torch.nn import CrossEntropyLoss, Module
+from torch.utils.data import Subset, DataLoader
 from torch import load
 from torchvision.datasets import CIFAR100
 import os
 import torchvision.transforms as t
 import matplotlib.pyplot as plt
 import torch
+from random import uniform
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
+from torch.optim import SGD
+from fedavg_logger import FEDAVGLogger
 from train import DEBUG
 
-B = 5   # minibatch size (batch size of each client)
+B = 128   # minibatch size (batch size of each client)
 C = 0.1 # fraction of clients
 K = 100  # clients
 LOSS_CRITERION = CrossEntropyLoss()
+WEIGHT_DECAY = weight_decay = 10 ** uniform(-6, -2)
+
 ROUNDS = ([1] if DEBUG else [20, 20, 10, 5])
-J = ([1] if DEBUG else [4, 4, 8, 16])   # local steps of each client
+J = ([1] if DEBUG else [4, 4, 8, 16])  # local steps of each client
 IID = [True, False, False, False]
 NC = [1, 5, 10, 50]  # number of classes in each client (for non iid)
 
@@ -31,19 +37,6 @@ def load_dataset(t_transforms, e_transforms) -> tuple[Subset, Subset]:
     print("[SETUP] - train and eval datasets loaded")
     return t_dataset, e_dataset
 
-"""
-def define_eval_sets(clients_datasets: list[SubsetToDataset]) -> list[tuple[SubsetToDataset, SubsetToDataset]]:
-    defined_sets = []
-    for c in clients_datasets:
-        train_idx, eval_idx = train_test_split(list(range(len(c))), test_size=0.1, random_state=1234, stratify=c.targets)
-        defined_sets.append(
-            (
-                SubsetToDataset(Subset(c, train_idx)), SubsetToDataset(Subset(c, eval_idx))
-            )
-        )
-    return defined_sets
-"""
-
 def define_transforms():
     transform_train = t.Compose([
         t.Resize(256, interpolation=t.InterpolationMode.BICUBIC),
@@ -59,16 +52,6 @@ def define_transforms():
     ])
     print(f"[SETUP] - transforms defined")
     return transform_train, transform_val
-
-def enable_transforms(datasets: tuple[list[SubsetToDataset], SubsetToDataset], train_transform: t.Compose, eval_transform: t.Compose):
-    i = 0
-    tr_datasets, ev_dataset = datasets
-    for tr in tr_datasets:
-        tr.add_transforms(train_transform)
-        print(f"SETUP: transforms applied to client #{i}")
-        i += 1
-    ev_dataset.add_transforms(eval_transform)
-    print("SETUP: transforms applied to eval dataset")
 
 def create_client_dataloaders(t_datasets: list[Subset], e_dataset: Subset) -> tuple[list[DataLoader], DataLoader, list[int]]:
     t_dataloaders = []
@@ -110,10 +93,9 @@ def set_label_threshold_for_debug(main_dataset: Subset, threshold: int) -> Subse
     indices_to_keep = [i for i, (_, l) in enumerate(main_dataset) if l < threshold]
     print(f"[SETUP] - filtering only samples of the following classes: {[l for l in range(0, threshold)]}")
     return Subset(main_dataset, indices_to_keep)
-    # return SubsetToDataset(Subset(main_dataset, indices_to_keep))
 
 
-def eval_phase(model, dataloader, w_path):
+def eval_phase(model, dataloader, w_path, logger):
     model.load_state_dict(load(w_path))
     size = len(dataloader.dataset)
     eval_loss, correct = 0, 0
@@ -126,22 +108,28 @@ def eval_phase(model, dataloader, w_path):
     eval_loss /= size
     correct /= size
     print(f"Accuracy: {100 * correct}, avg loss: {eval_loss}")
+    logger.add_eval_results(100 * correct, eval_loss)
 
-# this is done to avoid getting data in this format all the time: subset.dataset.data
-class SubsetToDataset(Dataset):
-    def __init__(self, subset: Subset):
-        self.data = subset.dataset.data[subset.indices]
-        self.targets = [subset.dataset.targets[x] for x in subset.indices]
-        self.transform = None
 
-    def add_transforms(self, trn: t.Compose):
-        self.transform = trn
-
-    def __getitem__(self, index):
-        if self.transform is not None:
-            return self.transform(self.data[index]), self.targets[index]
+def generate_hyperparameters_combinations(model: Module):
+    loggers = []
+    for i, n_rounds in enumerate(ROUNDS):
+        if not IID[i]:
+            for n_classes in NC:
+                loggers.append(FEDAVGLogger(IID[i], n_rounds, J[i], generate_scheduler(model, J[i]), n_classes))
         else:
-            return self.data[index], self.targets[index]
+            loggers.append(FEDAVGLogger(IID[i], n_rounds, J[i], generate_scheduler(model, J[i])))
+    return loggers
 
-    def __len__(self):
-        return self.data.shape[0]
+
+def generate_scheduler(model, j):
+    optimizer = SGD(model.parameters(), momentum=0.9, lr=18)
+    #warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=int(j / 4))
+    cosine_sched = CosineAnnealingLR(optimizer, T_max=j)
+    #constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: j / 4)
+    # scheduler = SequentialLR(
+    #    optimizer,
+    #    schedulers=[warmup_sched, cosine_sched, constant_sched],
+    #    milestones=[int(j / 4), int(3 * j / 4)]
+    # )
+    return cosine_sched
