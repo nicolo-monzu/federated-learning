@@ -1,9 +1,10 @@
+import argparse
 import random
 from pprint import pprint
 
 from train import start
 
-def random_search(num_trials=20, num_epochs=15):
+def random_search(num_trials=15, num_epochs=10):
     best_accuracy = 0
     best_trial = None
 
@@ -34,4 +35,10 @@ def random_search(num_trials=20, num_epochs=15):
 
 
 if __name__ == "__main__":
-    random_search()
+    parser = argparse.ArgumentParser(description="Run a random search for hyperparameter optimization.")
+    parser.add_argument("--num_trials", type=int, default=15, help="Total number of search trials to run (default: 15)")
+    parser.add_argument("--num_epochs", type=int, default=10, help="Number of training epochs per trial (default: 10)")
+
+    args = parser.parse_args()
+
+    random_search(num_trials=args.num_trials, num_epochs=args.num_epochs)
