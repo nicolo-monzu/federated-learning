@@ -36,8 +36,20 @@ def random_search(num_trials=15, num_epochs=10):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a random search for hyperparameter optimization.")
-    parser.add_argument("--num_trials", type=int, default=15, help="Total number of search trials to run (default: 15)")
-    parser.add_argument("--num_epochs", type=int, default=10, help="Number of training epochs per trial (default: 10)")
+
+    parser.add_argument(
+        "--num_trials",
+        type=int,
+        default=15,
+        help="Total number of search trials to run (default: 15)"
+    )
+
+    parser.add_argument(
+        "--num_epochs",
+        type=int,
+        default=10,
+        help="Number of training epochs per trial (default: 10)"
+    )
 
     args = parser.parse_args()
 

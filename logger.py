@@ -1,12 +1,18 @@
 import json
 import csv
 import os
+import shutil
+
 
 class Logger:
-    def __init__(self, directory, run_name):
+    def __init__(self, directory, run_name, step_name="epoch", total_key="total_epochs", best_key="best_epoch"):
         os.makedirs(directory, exist_ok=True)
+        self.dir = directory
         self.log_path = f'{directory}/{run_name}_log.csv'
         self.det_path = f'{directory}/{run_name}.json'
+        self.step_name = step_name
+        self.total_key = total_key
+        self.best_key = best_key
         self.run = None
         self.logs = None
 
@@ -16,9 +22,24 @@ class Logger:
     def get_best_accuracy(self):
         return self.run['best_accuracy']
 
+    def new_run_name(self, run_name):
+        old_log_path = self.log_path
+
+        self.log_path = f'{self.dir}/{run_name}_log.csv'
+        self.det_path = f'{self.dir}/{run_name}.json'
+        self.run['name'] = run_name
+
+        # Create new json file
+        with open(self.det_path, 'w') as f:
+            json.dump(self.run, f, indent=4, ensure_ascii=False)
+
+        # Create new log file
+        shutil.copy(old_log_path, self.log_path)
+
+
     def start(self, run):
         self.run = run
-        self.logs = [['epoch', 'train_loss', 'val_loss', 'val_acc', 'lr']]
+        self.logs = [[self.step_name, 'train_loss', 'val_loss', 'val_acc', 'lr']]
 
         # Create json file
         with open(self.det_path, 'w') as f:
@@ -50,12 +71,12 @@ class Logger:
         os.replace(self.det_path + '.tmp', self.det_path)
 
 
-    def log(self, epoch, train_loss, val_loss, val_acc, lr):
-        self.logs.append([epoch, train_loss, val_loss, val_acc, lr])
+    def log(self, step, train_loss, val_loss, val_acc, lr):
+        self.logs.append([step, train_loss, val_loss, val_acc, lr])
 
-        self.run['total_epochs'] = epoch
+        self.run[self.total_key] = step
         if val_acc > self.run['best_accuracy']:
-            self.run['best_epoch'] = epoch
+            self.run[self.best_key] = step
             self.run['best_accuracy'] = val_acc
 
         # Update log file

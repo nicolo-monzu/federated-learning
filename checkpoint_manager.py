@@ -8,10 +8,14 @@ def save(checkpoint, filename):
 class CheckpointManager:
     def __init__(self, directory, run_name):
         os.makedirs(directory, exist_ok=True)
+        self.dir = directory
         self.path = f'{directory}/{run_name}.pth'
         self.best_acc = -1.0
         self.best_model_state_dict = None
         self.loaded = None
+
+    def set_run_name(self, run_name):
+        self.path = f'{self.dir}/{run_name}.pth'
 
     def save(self, epoch, model, optimizer, scaler, scheduler, logger, val_acc):
         # Update if best model
@@ -22,6 +26,7 @@ class CheckpointManager:
             }
 
         checkpoint = {
+            'model_type': 'centralized',
             # Last
             'epoch': epoch,
             'model_state_dict': model.state_dict(),

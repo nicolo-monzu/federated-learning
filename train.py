@@ -1,10 +1,11 @@
+import argparse
 import sys
 from datetime import datetime
 
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
-from torchvision.transforms.v2 import MixUp, CutMix
+from torchvision.transforms.v2 import MixUp, CutMix, RandomChoice
 from checkpoint_manager import CheckpointManager
 from data.dataloader import create_dataloaders, DEVICE
 from logger import Logger
@@ -17,11 +18,7 @@ NUM_CLASSES = 100
 
 mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
 cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
-
-def apply_mixup_cutmix(inputs, targets):
-    if torch.rand(1).item() < 0.5:
-        return mixup(inputs, targets)
-    return cutmix(inputs, targets)
+apply_mixup_cutmix = RandomChoice([cutmix, mixup])
 
 def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
     model.train()
@@ -160,24 +157,34 @@ def build_training_objects(run):
     return train_loader, val_loader, model, criterion, optimizer, scaler, scheduler
 
 
-def resume(run_name, num_epochs):
+def resume(run_name, total_epochs, separate=False):
     checkpoints_dir = 'centralized_model/checkpoints/'
     logs_dir = 'centralized_model/logs/'
     plots_dir = 'centralized_model/plots/'
 
-    # Cleanup and checkpoint loading
+    # Cleanup, restoring files and checkpoint loading
     manager = CheckpointManager(checkpoints_dir, run_name)
     logger_state_dict, epoch = manager.resume()
 
     logger = Logger(logs_dir, run_name)
     logger.resume(logger_state_dict)
+
+    if separate:
+        run_name = ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S')
+        manager.set_run_name(run_name)
+        logger.new_run_name(run_name)
+
     run = logger.get_run()
 
     if DEBUG:
         if not run['debug']:
             sys.exit('Error: Attempted to resume in debug mode a non debug training')
         print('Debug mode')
+
     print('Using device:', DEVICE)
+
+    if USE_AMP:
+        print('Using automatic mixed precision')
 
     train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run)
 
@@ -187,13 +194,13 @@ def resume(run_name, num_epochs):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, epoch + 1)
+    train(total_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, epoch + 1)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     warmup_epochs = 5
-    cosine_epochs = 35
+    cosine_epochs = 45
 
     if DEBUG:
         batch_size = 1
@@ -236,6 +243,82 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
+
 if __name__ == '__main__':
-    # start()
-    pass
+    parser = argparse.ArgumentParser(description="Start or resume a centralized model training.")
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    # Start
+    start_parser = subparsers.add_parser(
+        "start",
+        help="Start a new training run"
+    )
+
+    start_parser.add_argument(
+        "-e", "--epochs",
+        type=int,
+        required=True,
+        help="Total number of training epochs"
+    )
+
+    start_parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=128,
+        help="Batch size"
+    )
+
+    start_parser.add_argument(
+        "--max-lr",
+        type=float,
+        default=0.01,
+        help="Maximum learning rate"
+    )
+
+    start_parser.add_argument(
+        "--decay-rate",
+        type=float,
+        default=0.75,
+        help="LLRD decay rate")
+
+    start_parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=1e-4,
+        help="Weight decay"
+    )
+
+    # Resume
+    resume_parser = subparsers.add_parser(
+        "resume",
+        help="Resume an existing training run"
+    )
+
+    resume_parser.add_argument(
+        "-r", "--run-name",
+        type=str,
+        required=True,
+        help="Name of the run to resume"
+    )
+
+    resume_parser.add_argument(
+        "-t", "--total-epochs",
+        type=int,
+        required=True,
+        help="Total number of training epochs"
+    )
+
+    resume_parser.add_argument(
+        "--separate",
+        action="store_true",
+        help="Resume training as a new run, preserving the original run's checkpoints and logs"
+    )
+
+
+    args = parser.parse_args()
+
+    if args.action == "start":
+        start(args.epochs, args.batch_size, args.max_lr, args.decay_rate, args.weight_decay)
+
+    elif args.action == "resume":
+        resume(args.run_name, args.total_epochs, args.separate)
