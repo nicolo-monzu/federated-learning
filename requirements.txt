@@ -1,5 +1,6 @@
-numpy
-matplotlib
-torch
-torchvision
-scikit-learn
+numpy~=2.4.3
+matplotlib~=3.10.8
+torch~=2.11.0+cu130
+torchvision~=0.26.0+cu130
+scikit-learn~=1.8.0
+tqdm~=4.70.0

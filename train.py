@@ -1,11 +1,12 @@
 import argparse
 import sys
 from datetime import datetime
-
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix, RandomChoice
+from tqdm.auto import tqdm
+
 from checkpoint_manager import CheckpointManager
 from data.dataloader import create_dataloaders, DEVICE
 from logger import Logger
@@ -24,7 +25,9 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
     model.train()
     running_loss = 0.0
 
-    for batch_idx, (inputs, targets) in enumerate(train_loader):
+    progress_bar = tqdm(train_loader, f'Train Epoch {epoch}', leave=False)
+
+    for batch_idx, (inputs, targets) in enumerate(progress_bar):
         if DEBUG and batch_idx > 1:
             break
 
@@ -57,8 +60,10 @@ def validate(model, val_loader, criterion):
 
     correct, total = 0, 0
 
+    progress_bar = tqdm(val_loader, 'Validation', leave=False)
+
     with torch.no_grad():
-        for batch_idx, (inputs, targets) in enumerate(val_loader):
+        for batch_idx, (inputs, targets) in enumerate(progress_bar):
             if DEBUG and batch_idx > 1:
                 break
 
