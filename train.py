@@ -237,7 +237,11 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
 
     if DEBUG:
         print('Debug mode')
+
     print('Using device:', DEVICE)
+
+    if USE_AMP:
+        print('Using automatic mixed precision')
 
     train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run)
 

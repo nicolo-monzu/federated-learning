@@ -9,7 +9,7 @@ def random_search(num_trials=15, num_epochs=10):
     best_trial = None
 
     for trial in range(1, num_trials + 1):
-        batch_size = random.choice([64, 128, 256])
+        batch_size = random.choice([32, 64, 128])
         # Logarithmic sampling from 1e-4 to 1
         max_lr = 10 ** random.uniform(-4, 0)
         # Linear sampling

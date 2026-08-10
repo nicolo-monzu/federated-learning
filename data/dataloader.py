@@ -26,8 +26,10 @@ def create_dataloaders(batch_size):
     ])
 
     dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, download=True, transform=transform_train)
-    train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=0.1, random_state=1234, stratify=dataset.targets)
-    train_loader = DataLoader(Subset(dataset, train_idx), batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=DEVICE=="cuda", persistent_workers=True)
+    train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=0.1, random_state=1234,
+                                          stratify=dataset.targets)
+    train_loader = DataLoader(Subset(dataset, train_idx), batch_size=batch_size, shuffle=True, num_workers=2,
+                              pin_memory=DEVICE == "cuda", persistent_workers=True)
 
 
     dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, transform=transform_val)
