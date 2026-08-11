@@ -38,14 +38,14 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a random search for hyperparameter optimization.")
 
     parser.add_argument(
-        "--num_trials",
+        "--num-trials",
         type=int,
         default=15,
         help="Total number of search trials to run (default: 15)"
     )
 
     parser.add_argument(
-        "--num_epochs",
+        "--num-epochs",
         type=int,
         default=10,
         help="Number of training epochs per trial (default: 10)"
