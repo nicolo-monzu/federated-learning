@@ -201,7 +201,7 @@ def resume(run_name, total_epochs, separate=False):
     print(f'Run name: {run['name']}')
     print('Resume training')
     train(total_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, epoch + 1)
-    plot_training(run['name'], logs_dir, plots_dir)
+    plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
