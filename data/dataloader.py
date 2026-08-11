@@ -1,38 +1,44 @@
+import warnings
 import torchvision
 import torchvision.transforms as T
 import torch
+from numpy.exceptions import VisibleDeprecationWarning
 from torch.utils.data import DataLoader, Subset
 from sklearn.model_selection import train_test_split
 import os
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+transform_train = T.Compose([
+    T.Resize(256, interpolation=T.InterpolationMode.BICUBIC),
+    T.RandomCrop(224),
+    T.RandomHorizontalFlip(),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet mean and std
+])
+
+transform_val = T.Compose([
+    T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet mean and std
+])
 
 def create_dataloaders(batch_size):
     dataset_dir = os.path.dirname(os.path.abspath(__file__))+"/../dataset"
 
-    transform_train = T.Compose([
-        T.Resize(256, interpolation=T.InterpolationMode.BICUBIC),
-        T.RandomCrop(224),
-        T.RandomHorizontalFlip(),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet mean and std
-    ])
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', VisibleDeprecationWarning)
+        dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, download=True, transform=transform_train)
 
-    transform_val = T.Compose([
-        T.Resize(224, interpolation=T.InterpolationMode.BICUBIC),
-        T.ToTensor(),
-        T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]) # ImageNet mean and std
-    ])
-
-    dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, download=True, transform=transform_train)
     train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=0.1, random_state=1234,
                                           stratify=dataset.targets)
     train_loader = DataLoader(Subset(dataset, train_idx), batch_size=batch_size, shuffle=True, num_workers=2,
-                              pin_memory=DEVICE == "cuda", persistent_workers=True)
+                              pin_memory=DEVICE == "cuda", drop_last=True, persistent_workers=True)
 
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', VisibleDeprecationWarning)
+        dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, transform=transform_val)
 
-    dataset = torchvision.datasets.CIFAR100(dataset_dir, train=True, transform=transform_val)
     val_loader = DataLoader(Subset(dataset, val_idx), batch_size=batch_size, shuffle=False, pin_memory=DEVICE=="cuda")
 
     return train_loader, val_loader

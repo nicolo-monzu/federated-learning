@@ -56,7 +56,7 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
 # Validation loop
 def validate(model, val_loader, criterion):
     model.eval()
-    val_loss = 0
+    val_loss = 0.0
 
     correct, total = 0, 0
 
@@ -73,12 +73,13 @@ def validate(model, val_loader, criterion):
                 outputs = model(inputs)
                 loss = criterion(outputs, targets)
 
-            val_loss += loss.item()
+            batch_size = targets.size(0)
+            val_loss += loss.item() * batch_size
             _, predicted = outputs.max(1)
-            total += targets.size(0)
+            total += batch_size
             correct += predicted.eq(targets).sum().item()
 
-    val_loss = val_loss / len(val_loader)
+    val_loss /= total
     val_accuracy = 100. * correct / total
 
     print(f'Validation Loss: {val_loss:.6f} Acc: {val_accuracy:.2f}%')
@@ -210,7 +211,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     if DEBUG:
         batch_size = 1
 
-    logs_dir = 'centralized_model/logs'
+    logs_dir = 'centralized_model/logs/'
     checkpoints_dir = 'centralized_model/checkpoints/'
     plots_dir = 'centralized_model/plots/'
 
