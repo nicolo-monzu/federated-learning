@@ -26,7 +26,7 @@ class CheckpointManager:
             }
 
         checkpoint = {
-            'model_type': 'centralized',
+            'training_type': 'centralized',
             # Last
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
