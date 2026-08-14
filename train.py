@@ -205,8 +205,8 @@ def resume(run_name, total_epochs, separate=False):
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
-    warmup_epochs = 5
-    cosine_epochs = 45
+    warmup_epochs = 3
+    cosine_epochs = 17
 
     if DEBUG:
         batch_size = 1
@@ -312,7 +312,7 @@ if __name__ == '__main__':
     )
 
     resume_parser.add_argument(
-        "-t", "--total-epochs",
+        "-e", "--total-epochs",
         type=int,
         required=True,
         help="Total number of training epochs"

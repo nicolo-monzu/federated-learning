@@ -13,8 +13,8 @@ def plot_training(run_name, logs_dir, save_dir=None):
 
     # Loss
     plt.figure()
-    plt.plot(epochs, train_loss, label='Train Loss')
-    plt.plot(epochs, val_loss, label='Val Loss')
+    plt.plot(epochs, train_loss, marker='o', markersize=4, label='Train Loss')
+    plt.plot(epochs, val_loss, marker='o', markersize=4, label='Val Loss')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
     plt.title('Loss')
@@ -27,9 +27,11 @@ def plot_training(run_name, logs_dir, save_dir=None):
     else:
         plt.show()
 
+    plt.close()
+
     # Accuracy
     plt.figure()
-    plt.plot(epochs, val_acc, label='Val Accuracy')
+    plt.plot(epochs, val_acc, marker='o', markersize=4, label='Val Accuracy')
     plt.xlabel('Epochs')
     plt.ylabel('Accuracy')
     plt.title('Accuracy')
@@ -40,6 +42,8 @@ def plot_training(run_name, logs_dir, save_dir=None):
         plt.savefig(f"{save_dir}/{run_name}_acc_plot")
     else:
         plt.show()
+
+    plt.close()
 
 
 if __name__ == '__main__':
