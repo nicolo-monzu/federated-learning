@@ -92,7 +92,9 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         min_scale = grad_scale
 
         num_selected_clients = max(int(run['num_clients'] * run['client_ratio']), 1)
-        for client in tqdm(random.sample(clients, num_selected_clients)):
+        progress_bar = tqdm(random.sample(clients, num_selected_clients), f'Train round {round}', leave=False)
+
+        for client in progress_bar:
             client_weights, client_loss, client_scale = client.update(run['num_steps_per_client'], model_dict, lr, run['decay_rate'], run['weight_decay'], grad_scale)
 
             avg_weights = running_model_avg(avg_weights, client_weights, 1/num_selected_clients)
@@ -107,6 +109,7 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         model_dict = avg_weights
 
         if round % validation_interval == 0  or round == num_rounds:
+            model.load_state_dict(model_dict)
             val_loss, val_acc = validate(model, val_loader, criterion)
             logger.log(round, train_loss, val_loss, val_acc, lr)
 
@@ -236,15 +239,15 @@ def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_s
     return logger.get_run()
 
 if __name__ == '__main__':
-    start(num_rounds = 10,
+    start(num_rounds = 350,
           num_steps_per_client = 4,
-          num_classes_per_client = 10,
-          rounds_per_scheduler_step = 1,
-          warmup_steps = 3,
-          cosine_steps = 17,
-          scale_grow_interval= 5,
-          validation_interval= 5,
+          num_classes_per_client = 100,
+          rounds_per_scheduler_step = 10,
+          warmup_steps = 5,
+          cosine_steps = 30,
+          scale_grow_interval= 50,
+          validation_interval= 10,
           batch_size = 64,
-          max_lr = 0.01,
-          decay_rate = 0.75,
-          weight_decay = 1e-4)
+          max_lr = 0.01346744607483611,
+          decay_rate = 0.78045144403681,
+          weight_decay = 4.28435051431285e-05)
