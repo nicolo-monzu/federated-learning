@@ -106,21 +106,21 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         # Server
         model_dict = avg_weights
 
-        if round % validation_interval == 0:
+        if round % validation_interval == 0  or round == num_rounds:
             val_loss, val_acc = validate(model, val_loader, criterion)
             logger.log(round, train_loss, val_loss, val_acc, lr)
 
         # update learning rate
-        if num_rounds % run['rounds_per_scheduler_step'] == 0:
+        if round % run['rounds_per_scheduler_step'] == 0:
             scheduler.step()
             lr = scheduler.optimizer.param_groups[0]["lr"]
 
         # update scale
         grad_scale = min_scale
-        if num_rounds % run['scale_grow_interval'] == 0:
+        if round % run['scale_grow_interval'] == 0:
             grad_scale *= 2
 
-        if round % validation_interval == 0:
+        if round % validation_interval == 0 or round == num_rounds:
             manager.save(round, model, grad_scale, scheduler, logger, val_acc)
 
 
