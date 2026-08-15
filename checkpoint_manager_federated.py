@@ -66,5 +66,9 @@ class CheckpointManagerFederated:
         for i in range(len(clients)):
             clients[i].load_scaler_state_dict(self.loaded['scaler_state_dicts'][i])
 
+        scale = self.loaded['scale']
+
         scheduler.load_state_dict(self.loaded['scheduler_state_dict'])
+
         self.loaded = None # Free memory
+        return scale

@@ -67,27 +67,23 @@ class Client:
         new_grad_scale = scaler.get_scale()
         return train_loss, new_grad_scale
 
-def running_model_avg(current, next_state, mul_factor):
+def running_sum(current, next_state):
     with torch.no_grad():
         if current is None:
             current = deepcopy(next_state)
-            for k in current:
-                current[k] *= mul_factor
         else:
             for k in current:
-                current[k] += next_state[k] * mul_factor
+                current[k].add_(next_state[k])
     return current
 
-def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, start_round = 1):
-    lr = run['max_learning_rate']
-
-    grad_scale = 2**16
+def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, start_round = 1, grad_scale = 2**16):
+    lr = scheduler.optimizer.param_groups[0]["lr"]
 
     # Weights to pass to clients
     model_dict = deepcopy(model.state_dict())
 
     for round in range(start_round, num_rounds + 1):
-        avg_weights = None
+        weights_sum = None
         running_loss = 0.0
         min_scale = grad_scale
 
@@ -97,7 +93,7 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         for client in progress_bar:
             client_weights, client_loss, client_scale = client.update(run['num_steps_per_client'], model_dict, lr, run['decay_rate'], run['weight_decay'], grad_scale)
 
-            avg_weights = running_model_avg(avg_weights, client_weights, 1/num_selected_clients)
+            weights_sum = running_sum(weights_sum, client_weights)
             running_loss += client_loss
             min_scale = min(min_scale, client_scale)
 
@@ -106,7 +102,9 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         print(f'Train Round: {round} Loss: {train_loss:.6f} Lr: {lr:e}')
 
         # Server
-        model_dict = avg_weights
+        for k in weights_sum:
+            weights_sum[k].div_(num_selected_clients)
+        model_dict = weights_sum
 
         if round % validation_interval == 0  or round == num_rounds:
             model.load_state_dict(model_dict)
@@ -183,12 +181,12 @@ def resume(run_name, total_rounds, separate=False):
     clients, val_loader, model, criterion, scheduler = build_training_objects(run)
 
     # Restore state
-    manager.restore_state(model, clients, scheduler)
+    scale = manager.restore_state(model, clients, scheduler)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, run['validation_interval'], round + 1)
+    train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, run['validation_interval'], round + 1, scale)
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
@@ -239,15 +237,15 @@ def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_s
     return logger.get_run()
 
 if __name__ == '__main__':
-    start(num_rounds = 350,
-          num_steps_per_client = 4,
-          num_classes_per_client = 100,
-          rounds_per_scheduler_step = 10,
-          warmup_steps = 5,
-          cosine_steps = 30,
-          scale_grow_interval= 50,
-          validation_interval= 10,
-          batch_size = 64,
-          max_lr = 0.01346744607483611,
-          decay_rate = 0.78045144403681,
-          weight_decay = 4.28435051431285e-05)
+    start(num_rounds=352,
+          num_steps_per_client=4,
+          num_classes_per_client=100,
+          rounds_per_scheduler_step=16,
+          warmup_steps=3,
+          cosine_steps=19,
+          scale_grow_interval=50,
+          validation_interval=10,
+          batch_size=64,
+          max_lr=0.0135,
+          decay_rate=0.78,
+          weight_decay=4.28e-05)
