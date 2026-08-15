@@ -11,7 +11,7 @@ from data.dataloader_federated import create_dataloader_federated
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
-from train import USE_AMP, apply_llrd, validate, apply_mixup_cutmix
+from train import USE_AMP, apply_llrd, validate
 from copy import deepcopy
 
 class Client:
@@ -47,11 +47,10 @@ class Client:
                 inputs, targets = next(train_iter)
 
             inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
-            inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
             with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets_mix)
+                loss = self.criterion(outputs, targets)
 
             optimizer.zero_grad()
             scaler.scale(loss).backward()
@@ -134,7 +133,7 @@ def build_training_objects(run):
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     # Create clients
     clients = [Client(model, criterion, dataloader) for dataloader in train_loaders]

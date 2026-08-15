@@ -17,10 +17,6 @@ DEBUG = False
 USE_AMP = DEVICE == "cuda"
 NUM_CLASSES = 100
 
-mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
-cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
-apply_mixup_cutmix = RandomChoice([cutmix, mixup])
-
 def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
     model.train()
     running_loss = 0.0
@@ -32,11 +28,10 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
             break
 
         inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
-        inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
         with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
             outputs = model(inputs)
-            loss = criterion(outputs, targets_mix)
+            loss = criterion(outputs, targets)
 
         optimizer.zero_grad()
         scaler.scale(loss).backward()
@@ -143,7 +138,7 @@ def build_training_objects(run):
     # Learning rate decaying
     parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
     optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
