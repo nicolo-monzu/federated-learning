@@ -40,8 +40,6 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
 
         optimizer.zero_grad()
         scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         scaler.step(optimizer)
         scaler.update()
 
@@ -274,7 +272,7 @@ if __name__ == '__main__':
     start_parser.add_argument(
         "--batch-size",
         type=int,
-        default=128,
+        default=64,
         help="Batch size"
     )
 

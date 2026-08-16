@@ -55,8 +55,6 @@ class Client:
 
             optimizer.zero_grad()
             scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             # if the scaler executes optimizer.step()
             if scaler.step(optimizer, lambda: True):
                 running_loss += loss.item()
@@ -79,8 +77,9 @@ def running_sum(current, next_state):
 def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, start_round = 1, grad_scale = 2**16):
     lr = scheduler.optimizer.param_groups[0]["lr"]
 
-    # Weights to pass to clients
-    model_dict = deepcopy(model.state_dict())
+    # Dict to pass to clients
+    with torch.no_grad():
+        model_dict = deepcopy(model.state_dict())
 
     for round in range(start_round, num_rounds + 1):
         weights_sum = None
@@ -102,9 +101,10 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         print(f'Train Round: {round} Loss: {train_loss:.6f} Lr: {lr:e}')
 
         # Server
-        for k in weights_sum:
-            weights_sum[k].div_(num_selected_clients)
-        model_dict = weights_sum
+        with torch.no_grad():
+            for k in weights_sum:
+                weights_sum[k].div_(num_selected_clients)
+                model_dict[k].copy_(weights_sum[k])
 
         if round % validation_interval == 0  or round == num_rounds:
             model.load_state_dict(model_dict)
@@ -243,8 +243,8 @@ if __name__ == '__main__':
           rounds_per_scheduler_step=16,
           warmup_steps=3,
           cosine_steps=19,
-          scale_grow_interval=50,
-          validation_interval=10,
+          scale_grow_interval=48,
+          validation_interval=12,
           batch_size=64,
           max_lr=0.0135,
           decay_rate=0.78,
