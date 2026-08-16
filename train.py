@@ -4,7 +4,6 @@ from datetime import datetime
 import torch
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
-from torchvision.transforms.v2 import MixUp, CutMix, RandomChoice
 from tqdm.auto import tqdm
 
 from checkpoint_manager import CheckpointManager
@@ -17,12 +16,20 @@ DEBUG = False
 USE_AMP = DEVICE == "cuda"
 NUM_CLASSES = 100
 
-mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
-cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
-apply_mixup_cutmix = RandomChoice([cutmix, mixup])
+def set_backbone(model, frozen):
+    for param in model.backbone.parameters():
+        param.requires_grad = not frozen
 
-def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
+    state = 'frozen_backbone' if frozen else 'unfrozen'
+    print(f'Backbone {state}')
+
+def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler, frozen_backbone):
     model.train()
+
+    # Keep frozen_backbone backbone in eval mode
+    if frozen_backbone:
+        model.backbone.eval()
+
     running_loss = 0.0
 
     progress_bar = tqdm(train_loader, f'Train Epoch {epoch}', leave=False)
@@ -32,16 +39,13 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
             break
 
         inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
-        inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
         with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
             outputs = model(inputs)
-            loss = criterion(outputs, targets_mix)
+            loss = criterion(outputs, targets)
 
         optimizer.zero_grad()
         scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
         scaler.step(optimizer)
         scaler.update()
 
@@ -86,9 +90,16 @@ def validate(model, val_loader, criterion):
     return val_loss, val_accuracy
 
 
-def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, start_epoch=1):
+def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, freeze_backbone_epochs, start_epoch=1):
+    freeze_backbone = start_epoch <= freeze_backbone_epochs
+    set_backbone(model, freeze_backbone)
     for epoch in range(start_epoch, num_epochs + 1):
-        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler)
+
+        if epoch == freeze_backbone_epochs + 1:
+            freeze_backbone = False
+            set_backbone(model, freeze_backbone)
+
+        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler, freeze_backbone)
 
         # At the end of each training iteration, perform a validation step
         val_loss, val_acc = validate(model, val_loader, criterion)
@@ -97,40 +108,13 @@ def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, sca
         scheduler.step()
 
         # Log
-        logger.log(epoch, train_loss, val_loss, val_acc, lr)
+        logger.log(epoch, train_loss, val_loss, val_acc, lr, freeze_backbone)
 
         # Checkpoint
         manager.save(epoch, model, optimizer, scaler, scheduler, logger, val_acc)
 
 
     print(f'Best validation accuracy: {logger.get_best_accuracy():.2f}%')
-
-def apply_llrd(model, learning_rate, decay_rate):
-    # Assign a lr to each layer
-
-    # classifier
-    param_groups = [{"params": model.classifier.parameters(), "lr": learning_rate}]
-
-    # norm
-    learning_rate *= decay_rate
-    param_groups.append({"params": model.backbone.norm.parameters(), "lr": learning_rate})
-
-    # blocks
-    for block in reversed(model.backbone.blocks):
-        learning_rate *= decay_rate
-        param_groups.append({"params": block.parameters(), "lr": learning_rate})
-
-    # pos_drop
-
-    # patch_embed
-    learning_rate *= decay_rate
-    param_groups.append({"params": model.backbone.patch_embed.parameters(), "lr": learning_rate})
-
-    param_groups.append({"params": model.backbone.pos_embed, "lr": learning_rate})
-    param_groups.append({"params": model.backbone.cls_token, "lr": learning_rate})
-
-    #print(list(a for (a,_) in model.backbone.named_parameters()))
-    return param_groups
 
 
 def build_training_objects(run):
@@ -140,11 +124,16 @@ def build_training_objects(run):
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
-    # Learning rate decaying
-    parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    criterion = nn.CrossEntropyLoss()
+    # Optimizer
+    lr = run['max_learning_rate']
+    parameters = [
+        {"params": model.classifier.parameters(), "lr": lr},
+        {"params": model.backbone.parameters(), "lr": lr/10}
+    ]
     optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
+
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
     # Scheduler
@@ -200,13 +189,14 @@ def resume(run_name, total_epochs, separate=False):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(total_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, epoch + 1)
+    train(total_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, run['freeze_backbone_epochs'], epoch + 1)
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
-def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
-    warmup_epochs = 3
-    cosine_epochs = 17
+def start(num_epochs, batch_size, max_lr, weight_decay):
+    warmup_epochs = 2
+    cosine_epochs = 18
+    freeze_backbone_epochs = 4
 
     if DEBUG:
         batch_size = 1
@@ -221,12 +211,12 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         'model': 'dino_vits16_100_centralized',
         'batch_size': batch_size,
         'max_learning_rate': max_lr,
-        'decay_rate': decay_rate,
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
         'scheduler': 'CosineAnnealingLR with warm-up',
         'warmup_epochs' : warmup_epochs,
         'cosine_epochs': cosine_epochs,
+        'freeze_backbone_epochs': freeze_backbone_epochs,
         'total_epochs': 0,
         'best_epoch': -1,
         'best_accuracy': -1.0,
@@ -249,7 +239,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager)
+    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, freeze_backbone_epochs)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
@@ -274,7 +264,7 @@ if __name__ == '__main__':
     start_parser.add_argument(
         "--batch-size",
         type=int,
-        default=128,
+        default=64,
         help="Batch size"
     )
 
@@ -284,12 +274,6 @@ if __name__ == '__main__':
         default=0.01,
         help="Maximum learning rate"
     )
-
-    start_parser.add_argument(
-        "--decay-rate",
-        type=float,
-        default=0.75,
-        help="LLRD decay rate")
 
     start_parser.add_argument(
         "--weight-decay",
@@ -328,7 +312,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.action == "start":
-        start(args.epochs, args.batch_size, args.max_lr, args.decay_rate, args.weight_decay)
+        start(args.epochs, args.batch_size, args.max_lr, args.weight_decay)
 
     elif args.action == "resume":
         resume(args.run_name, args.total_epochs, args.separate)

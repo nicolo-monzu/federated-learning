@@ -11,7 +11,7 @@ from data.dataloader_federated import create_dataloader_federated
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
-from train import USE_AMP, apply_llrd, validate, apply_mixup_cutmix
+from train import USE_AMP, validate, set_backbone
 from copy import deepcopy
 
 class Client:
@@ -20,21 +20,28 @@ class Client:
         self.criterion = criterion
         self.train_loader = train_loader
 
-    def update(self, num_steps, model_dict, learning_rate, decay_rate, weight_decay, grad_scale):
+    def update(self, num_steps, model_dict, learning_rate, weight_decay, grad_scale, frozen_backbone):
         # load server weights
         self.model.load_state_dict(model_dict)
         # create optimizer
-        parameters = apply_llrd(self.model, learning_rate, decay_rate)
-        optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=weight_decay)
+        parameters = [
+            {"params": self.model.classifier.parameters(), "lr": learning_rate},
+            {"params": self.model.backbone.parameters(), "lr": learning_rate / 10}
+        ]
+        optimizer = torch.optim.SGD(parameters, lr=learning_rate, momentum=0.9, weight_decay=weight_decay)
         # create scaler
         scaler = torch.amp.GradScaler("cuda", init_scale=grad_scale, enabled=USE_AMP)
         # training one epoch
-        train_loss, new_grad_scale = self.__train_for_num_steps(num_steps, optimizer, scaler)
+        train_loss, new_grad_scale = self.__train_for_num_steps(num_steps, optimizer, scaler, frozen_backbone)
         # return new weights
         return self.model.state_dict(), train_loss, new_grad_scale
 
-    def __train_for_num_steps(self, num_steps, optimizer, scaler):
+    def __train_for_num_steps(self, num_steps, optimizer, scaler, frozen_backbone):
         self.model.train()
+
+        if frozen_backbone:
+            self.model.backbone.eval()
+
         current_steps = 0
         running_loss = 0.0
 
@@ -47,16 +54,13 @@ class Client:
                 inputs, targets = next(train_iter)
 
             inputs, targets = inputs.to(DEVICE, non_blocking=True), targets.to(DEVICE, non_blocking=True)
-            inputs, targets_mix = apply_mixup_cutmix(inputs, targets)
 
             with torch.amp.autocast(device_type=DEVICE, enabled=USE_AMP):
                 outputs = self.model(inputs)
-                loss = self.criterion(outputs, targets_mix)
+                loss = self.criterion(outputs, targets)
 
             optimizer.zero_grad()
             scaler.scale(loss).backward()
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=1.0)
             # if the scaler executes optimizer.step()
             if scaler.step(optimizer, lambda: True):
                 running_loss += loss.item()
@@ -67,33 +71,48 @@ class Client:
         new_grad_scale = scaler.get_scale()
         return train_loss, new_grad_scale
 
-def running_sum(current, next_state):
+def running_sum(current, next_state, trainable):
     with torch.no_grad():
         if current is None:
-            current = deepcopy(next_state)
+            current = {
+                k: v.detach().clone()
+                for k, v in next_state.items()
+                if k in trainable
+            }
         else:
-            for k in current:
-                current[k].add_(next_state[k])
+            for k in trainable:
+                if k in current and k in next_state:
+                    current[k].add_(next_state[k])
+                else: print(f"Warning su running_sum: {k} non è presente in entrambi i dict")
+
     return current
 
-def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, start_round = 1, grad_scale = 2**16):
+def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, freeze_backbone_rounds, start_round = 1, grad_scale = 2**16):
+    freeze_backbone = start_round <= freeze_backbone_rounds
+    set_backbone(model, freeze_backbone)
     lr = scheduler.optimizer.param_groups[0]["lr"]
 
-    # Weights to pass to clients
-    model_dict = deepcopy(model.state_dict())
+    # Dict to pass to clients
+    with torch.no_grad():
+        model_dict = deepcopy(model.state_dict())
 
     for round in range(start_round, num_rounds + 1):
         weights_sum = None
         running_loss = 0.0
         min_scale = grad_scale
 
+        if round == freeze_backbone_rounds + 1:
+            freeze_backbone = False
+            set_backbone(model, freeze_backbone)
+
+        trainable = {name for name, p in model.named_parameters() if p.requires_grad}
         num_selected_clients = max(int(run['num_clients'] * run['client_ratio']), 1)
         progress_bar = tqdm(random.sample(clients, num_selected_clients), f'Train round {round}', leave=False)
 
         for client in progress_bar:
-            client_weights, client_loss, client_scale = client.update(run['num_steps_per_client'], model_dict, lr, run['decay_rate'], run['weight_decay'], grad_scale)
+            client_weights, client_loss, client_scale = client.update(run['num_steps_per_client'], model_dict, lr, run['weight_decay'], grad_scale, freeze_backbone)
 
-            weights_sum = running_sum(weights_sum, client_weights)
+            weights_sum = running_sum(weights_sum, client_weights, trainable)
             running_loss += client_loss
             min_scale = min(min_scale, client_scale)
 
@@ -102,14 +121,15 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         print(f'Train Round: {round} Loss: {train_loss:.6f} Lr: {lr:e}')
 
         # Server
-        for k in weights_sum:
-            weights_sum[k].div_(num_selected_clients)
-        model_dict = weights_sum
+        with torch.no_grad():
+            for k in weights_sum:
+                weights_sum[k].div_(num_selected_clients)
+                model_dict[k].copy_(weights_sum[k])
 
         if round % validation_interval == 0  or round == num_rounds:
             model.load_state_dict(model_dict)
             val_loss, val_acc = validate(model, val_loader, criterion)
-            logger.log(round, train_loss, val_loss, val_acc, lr)
+            logger.log(round, train_loss, val_loss, val_acc, lr, freeze_backbone)
 
         # update learning rate
         if round % run['rounds_per_scheduler_step'] == 0:
@@ -132,7 +152,7 @@ def build_training_objects(run):
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
     # Create clients
     clients = [Client(model, criterion, dataloader) for dataloader in train_loaders]
@@ -186,11 +206,11 @@ def resume(run_name, total_rounds, separate=False):
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, run['validation_interval'], round + 1, scale)
+    train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, run['validation_interval'], run['freeze_backbone_rounds'], round + 1, scale)
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
-def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_scheduler_step, warmup_steps, cosine_steps, scale_grow_interval, validation_interval, batch_size, max_lr, decay_rate, weight_decay):
+def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_scheduler_step, warmup_steps, cosine_steps, freeze_backbone_rounds, scale_grow_interval, validation_interval, batch_size, max_lr, weight_decay):
     num_clients = 100
     client_ratio = 0.1
 
@@ -208,13 +228,13 @@ def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_s
         'num_classes_per_client': num_classes_per_client,
         'batch_size': batch_size,
         'max_learning_rate': max_lr,
-        'decay_rate': decay_rate,
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
         'scheduler': 'CosineAnnealingLR with warm-up',
         'rounds_per_scheduler_step': rounds_per_scheduler_step,
         'warmup_steps': warmup_steps,
         'cosine_steps': cosine_steps,
+        'freeze_backbone_rounds': freeze_backbone_rounds,
         'scale_grow_interval': scale_grow_interval,
         'validation_interval': validation_interval,
         'total_rounds': 0,
@@ -232,7 +252,7 @@ def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_s
     # Run the training process for {num_rounds} rounds
     print(f'Run name: {run['name']}')
     print('Start training')
-    train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval)
+    train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, freeze_backbone_rounds)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
@@ -240,12 +260,12 @@ if __name__ == '__main__':
     start(num_rounds=352,
           num_steps_per_client=4,
           num_classes_per_client=100,
-          rounds_per_scheduler_step=16,
-          warmup_steps=3,
-          cosine_steps=19,
-          scale_grow_interval=50,
-          validation_interval=10,
+          rounds_per_scheduler_step=8,
+          warmup_steps=4,
+          cosine_steps=40,
+          freeze_backbone_rounds=72,
+          scale_grow_interval=48,
+          validation_interval=12,
           batch_size=64,
-          max_lr=0.0135,
-          decay_rate=0.78,
-          weight_decay=4.28e-05)
+          max_lr=0.01,
+          weight_decay=1e-4)

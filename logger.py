@@ -39,7 +39,7 @@ class Logger:
 
     def start(self, run):
         self.run = run
-        self.logs = [[self.step_name, 'train_loss', 'val_loss', 'val_acc', 'lr']]
+        self.logs = [[self.step_name, 'train_loss', 'val_loss', 'val_acc', 'lr', 'frozen_backbone']]
 
         # Create json file
         with open(self.det_path, 'w') as f:
@@ -71,8 +71,8 @@ class Logger:
         os.replace(self.det_path + '.tmp', self.det_path)
 
 
-    def log(self, step, train_loss, val_loss, val_acc, lr):
-        self.logs.append([step, train_loss, val_loss, val_acc, lr])
+    def log(self, step, train_loss, val_loss, val_acc, lr, frozen_backbone):
+        self.logs.append([step, train_loss, val_loss, val_acc, lr, frozen_backbone])
 
         self.run[self.total_key] = step
         if val_acc > self.run['best_accuracy']:
