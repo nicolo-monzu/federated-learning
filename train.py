@@ -225,6 +225,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
         'scheduler': 'CosineAnnealingLR with warm-up',
         'warmup_epochs' : warmup_epochs,
         'cosine_epochs': cosine_epochs,
+        'augmentation': 'MixUp/CutMix',
         'total_epochs': 0,
         'best_epoch': -1,
         'best_accuracy': -1.0,
