@@ -150,7 +150,7 @@ def build_training_objects(run):
     # Scheduler
     warmup_epochs = run['warmup_epochs']
     cosine_epochs = run['cosine_epochs']
-    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs)
+    warmup_sched = LinearLR(optimizer, start_factor=0.1, total_iters=warmup_epochs + 1)
     cosine_sched = CosineAnnealingLR(optimizer, T_max=cosine_epochs)
     constant_sched = MultiplicativeLR(optimizer, lr_lambda=lambda epoch: 1.0)
 

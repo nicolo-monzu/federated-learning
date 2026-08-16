@@ -141,7 +141,7 @@ def build_training_objects(run):
     warmup_steps = run['warmup_steps']
     cosine_steps = run['cosine_steps']
     dummy_optimizer = torch.optim.SGD([torch.zeros(1, requires_grad=True)], lr=run['max_learning_rate'])
-    warmup_sched = LinearLR(dummy_optimizer, start_factor=0.1, total_iters=warmup_steps)
+    warmup_sched = LinearLR(dummy_optimizer, start_factor=0.1, total_iters=warmup_steps + 1)
     cosine_sched = CosineAnnealingLR(dummy_optimizer, T_max=cosine_steps)
     constant_sched = MultiplicativeLR(dummy_optimizer, lr_lambda=lambda epoch: 1.0)
 
