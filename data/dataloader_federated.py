@@ -29,12 +29,15 @@ def create_dataloader_federated(batch_size, num_clients, num_classes_per_client)
 
     train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=0.1, random_state=1234, stratify=dataset.targets)
 
-    if K == Nc and Nc == C:
-        subsets = split_subset_iid(Subset(dataset, train_idx), C, rng)
-    else:
-        subsets = split_subset_non_iid(Subset(dataset, train_idx), K, Nc, C, rng)
+
     # Note: The iid algorithm implemented need K = C = Nc. If an iid run has K != C, the algorith executed is non-iid
     # with Nc = C, that may produce slightly differences in the number of samples of each dataloader
+    if K == Nc and Nc == C:
+        print("iid sharding")
+        subsets = split_subset_iid(Subset(dataset, train_idx), C, rng)
+    else:
+        print(f"non iid sharding (Nc = {Nc})")
+        subsets = split_subset_non_iid(Subset(dataset, train_idx), K, Nc, C, rng)
 
 
     train_loaders = [
