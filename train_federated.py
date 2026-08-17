@@ -1,4 +1,5 @@
 import argparse
+import os
 import random
 from datetime import datetime
 import torch
@@ -151,8 +152,8 @@ def build_training_objects(run):
     clients = [Client(model, criterion, dataloader) for dataloader in train_loaders]
 
     # Scheduler
-    warmup_scheduler_steps = run['warmup_scheduler_steps']
-    cosine_scheduler_steps = run['cosine_scheduler_steps']
+    warmup_scheduler_steps = run['warmup_steps']
+    cosine_scheduler_steps = run['cosine_steps']
     dummy_optimizer = torch.optim.SGD([torch.zeros(1, requires_grad=True)], lr=run['max_learning_rate'])
     warmup_sched = LinearLR(dummy_optimizer, start_factor=0.1, total_iters=warmup_scheduler_steps + 1)
     cosine_sched = CosineAnnealingLR(dummy_optimizer, T_max=cosine_scheduler_steps)
@@ -223,6 +224,15 @@ def start(num_rounds,
     # Generate a run name if one was not provided
     if run_name is None:
         run_name = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    if os.path.exists(f'{checkpoints_dir}/{run_name}.pth'):
+        print(
+            f'Error: checkpoint "{run_name}.pth" already exists. '
+            'Training cannot start with this run name. '
+            'Use "train.py resume" to continue from the existing checkpoint, '
+            'or remove/rename the checkpoint to start a new training run with this name.'
+        )
+        return {'best_accuracy': -1}
 
     # Init checkpoint manager and logger
     run = {

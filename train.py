@@ -1,4 +1,5 @@
 import argparse
+import os
 import sys
 from datetime import datetime
 import torch
@@ -209,6 +210,15 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epoch
     # Generate a run name if one was not provided
     if run_name is None:
         run_name = ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S')
+
+    if os.path.exists(f'{checkpoints_dir}/{run_name}.pth'):
+        print(
+            f'Error: checkpoint "{run_name}.pth" already exists. '
+            'Training cannot start with this run name. '
+            'Use "train.py resume" to continue from the existing checkpoint, '
+            'or remove/rename the checkpoint to start a new training run with this name.'
+        )
+        return {'best_accuracy': -1}
 
     # Init checkpoint manager and logger
     run = {
