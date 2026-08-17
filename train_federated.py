@@ -13,8 +13,16 @@ from data.dataloader_federated import create_dataloader_federated
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
-from train import USE_AMP, apply_llrd, validate, apply_mixup_cutmix, config
+from train import USE_AMP, apply_llrd, validate, apply_mixup_cutmix
 from copy import deepcopy
+
+def load_config(path="config.yaml"):
+    with open(path, "r") as f:
+        config = yaml.safe_load(f)
+
+    return config["train_federated"]
+
+config = load_config()
 
 class Client:
     def __init__(self, model, criterion, train_loader):
@@ -252,14 +260,7 @@ def start(num_rounds,
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
-def load_config(path="config.yaml"):
-    with open(path, "r") as f:
-        config = yaml.safe_load(f)
-
-    return config["train_federated"]
-
 if __name__ == '__main__':
-    config = load_config()
     parser = argparse.ArgumentParser(description="Start or resume a federated model training.")
     subparsers = parser.add_subparsers(dest="action", required=True)
 
