@@ -7,8 +7,8 @@ train_federated:
   rounds_per_scheduler_step: 16  # Number of round for a scheduler step (update)
   warmup_scheduler_steps: 3
   cosine_scheduler_steps: 19
-  scale_grow_interval: 48
-  validation_interval: 12
+  scale_grow_interval: 48        # Number of round for a scale grow
+  validation_interval: 12        # Number of round for a validation
   batch_size: 64
   max_lr: 0.014
   decay_rate: 0.78
