@@ -1,0 +1,30 @@
+train_federated:
+  num_rounds: 352
+  num_clients: 100
+  client_ratio: 0.1              # C
+  num_steps_per_client: 4        # J
+  num_classes_per_client: 100    # Nc
+  rounds_per_scheduler_step: 16  # Number of round for a scheduler step (update)
+  warmup_scheduler_steps: 3
+  cosine_scheduler_steps: 19
+  scale_grow_interval: 48
+  validation_interval: 12
+  batch_size: 64
+  max_lr: 0.014
+  decay_rate: 0.78
+  weight_decay: 4.3e-05
+  checkpoints_dir: 'federated_model/checkpoints/'
+  logs_dir: 'federated_model/logs/'
+  plots_dir: 'federated_model/plots/'
+
+train:
+  num_epochs: 20
+  batch_size: 64
+  max_lr: 0.014
+  decay_rate: 0.78
+  weight_decay: 4.3e-05
+  warmup_epochs: 3
+  cosine_epochs: 17
+  checkpoints_dir: 'centralized_model/checkpoints/'
+  logs_dir: 'centralized_model/logs/'
+  plots_dir: 'centralized_model/plots/'

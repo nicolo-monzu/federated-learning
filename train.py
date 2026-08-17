@@ -2,6 +2,7 @@ import argparse
 import sys
 from datetime import datetime
 import torch
+import yaml
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from torchvision.transforms.v2 import MixUp, CutMix, RandomChoice
@@ -161,10 +162,7 @@ def build_training_objects(run):
     return train_loader, val_loader, model, criterion, optimizer, scaler, scheduler
 
 
-def resume(run_name, total_epochs, separate=False):
-    checkpoints_dir = 'centralized_model/checkpoints/'
-    logs_dir = 'centralized_model/logs/'
-    plots_dir = 'centralized_model/plots/'
+def resume(run_name, total_epochs, checkpoints_dir, logs_dir, plots_dir, separate=False):
 
     # Cleanup, restoring files and checkpoint loading
     manager = CheckpointManager(checkpoints_dir, run_name)
@@ -202,16 +200,11 @@ def resume(run_name, total_epochs, separate=False):
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
-def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
-    warmup_epochs = 3
-    cosine_epochs = 17
+def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epochs,
+          cosine_epochs, checkpoints_dir, logs_dir, plots_dir):
 
     if DEBUG:
         batch_size = 1
-
-    logs_dir = 'centralized_model/logs/'
-    checkpoints_dir = 'centralized_model/checkpoints/'
-    plots_dir = 'centralized_model/plots/'
 
     # Init checkpoint manager and logger
     run = {
@@ -253,7 +246,14 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay):
     return logger.get_run()
 
 
+def load_config(path="config.yaml"):
+    with open(path, "r") as f:
+        config = yaml.safe_load(f)
+
+    return config["train"]
+
 if __name__ == '__main__':
+    config = load_config()
     parser = argparse.ArgumentParser(description="Start or resume a centralized model training.")
     subparsers = parser.add_subparsers(dest="action", required=True)
 
@@ -266,35 +266,35 @@ if __name__ == '__main__':
     start_parser.add_argument(
         "-e", "--epochs",
         type=int,
-        required=True,
-        help="Total number of training epochs"
+        default=config["num_epochs"],
+        help="Total number of training epochs. (default: config.yaml)"
     )
 
     start_parser.add_argument(
         "--batch-size",
         type=int,
-        default=64,
-        help="Batch size"
+        default=config["batch_size"],
+        help="Batch size. (default: config.yaml)"
     )
 
     start_parser.add_argument(
         "--max-lr",
         type=float,
-        default=0.01,
-        help="Maximum learning rate"
+        default=config["max_lr"],
+        help="Maximum learning rate. (default: config.yaml)"
     )
 
     start_parser.add_argument(
         "--decay-rate",
         type=float,
-        default=0.75,
-        help="LLRD decay rate")
+        default=config["decay_rate"],
+        help="LLRD decay rate. (default: config.yaml)")
 
     start_parser.add_argument(
         "--weight-decay",
         type=float,
-        default=1e-4,
-        help="Weight decay"
+        default=config["weight_decay"],
+        help="Weight decay. (default: config.yaml)"
     )
 
     # Resume
@@ -304,7 +304,7 @@ if __name__ == '__main__':
     )
 
     resume_parser.add_argument(
-        "-r", "--run-name",
+        "-n", "--run-name",
         type=str,
         required=True,
         help="Name of the run to resume"
@@ -313,21 +313,39 @@ if __name__ == '__main__':
     resume_parser.add_argument(
         "-e", "--total-epochs",
         type=int,
-        required=True,
-        help="Total number of training epochs"
+        default=config["num_epochs"],
+        help="Total number of training epochs. (default: config.yaml)"
     )
 
     resume_parser.add_argument(
         "--separate",
         action="store_true",
-        help="Resume training as a new run, preserving the original run's checkpoints and logs"
+        help="Resume training as a new run, preserving the original run's checkpoints and logs. (default: false)"
     )
 
 
     args = parser.parse_args()
 
     if args.action == "start":
-        start(args.epochs, args.batch_size, args.max_lr, args.decay_rate, args.weight_decay)
+        start(
+            num_epochs=args.epochs,
+            batch_size=args.batch_size,
+            max_lr=args.max_lr,
+            decay_rate=args.decay_rate,
+            weight_decay=args.weight_decay,
+            warmup_epochs=config["warmup_epochs"],
+            cosine_epochs=config["cosine_epochs"],
+            checkpoints_dir=config["checkpoints_dir"],
+            logs_dir=config["logs_dir"],
+            plots_dir=config["plots_dir"]
+        )
 
     elif args.action == "resume":
-        resume(args.run_name, args.total_epochs, args.separate)
+        resume(
+            run_name=args.run_name,
+            total_epochs=args.total_epochs,
+            checkpoints_dir=config["checkpoints_dir"],
+            logs_dir=config["logs_dir"],
+            plots_dir=config["plots_dir"],
+            separate=args.separate
+        )

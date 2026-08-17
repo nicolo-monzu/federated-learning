@@ -1,6 +1,8 @@
+import argparse
 import random
 from datetime import datetime
 import torch
+import yaml
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
 from tqdm import tqdm
@@ -11,7 +13,7 @@ from data.dataloader_federated import create_dataloader_federated
 from logger import Logger
 from plot import plot_training
 from models.model import Dino_vits16_100
-from train import USE_AMP, apply_llrd, validate, apply_mixup_cutmix
+from train import USE_AMP, apply_llrd, validate, apply_mixup_cutmix, config
 from copy import deepcopy
 
 class Client:
@@ -138,26 +140,23 @@ def build_training_objects(run):
     clients = [Client(model, criterion, dataloader) for dataloader in train_loaders]
 
     # Scheduler
-    warmup_steps = run['warmup_steps']
-    cosine_steps = run['cosine_steps']
+    warmup_scheduler_steps = run['warmup_scheduler_steps']
+    cosine_scheduler_steps = run['cosine_scheduler_steps']
     dummy_optimizer = torch.optim.SGD([torch.zeros(1, requires_grad=True)], lr=run['max_learning_rate'])
-    warmup_sched = LinearLR(dummy_optimizer, start_factor=0.1, total_iters=warmup_steps + 1)
-    cosine_sched = CosineAnnealingLR(dummy_optimizer, T_max=cosine_steps)
+    warmup_sched = LinearLR(dummy_optimizer, start_factor=0.1, total_iters=warmup_scheduler_steps + 1)
+    cosine_sched = CosineAnnealingLR(dummy_optimizer, T_max=cosine_scheduler_steps)
     constant_sched = MultiplicativeLR(dummy_optimizer, lr_lambda=lambda epoch: 1.0)
 
     scheduler = SequentialLR(
         dummy_optimizer,
         schedulers=[warmup_sched, cosine_sched, constant_sched],
-        milestones=[warmup_steps, warmup_steps + cosine_steps]
+        milestones=[warmup_scheduler_steps, warmup_scheduler_steps + cosine_scheduler_steps]
     )
 
     return clients, val_loader, model, criterion, scheduler
 
 
-def resume(run_name, total_rounds, separate=False):
-    checkpoints_dir = 'federated_model/checkpoints/'
-    logs_dir = 'federated_model/logs/'
-    plots_dir = 'federated_model/plots/'
+def resume(run_name, total_rounds, checkpoints_dir, logs_dir, plots_dir, separate=False):
 
     # Cleanup, restoring files and checkpoint loading
     manager = CheckpointManagerFederated(checkpoints_dir, run_name)
@@ -190,13 +189,24 @@ def resume(run_name, total_rounds, separate=False):
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
-def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_scheduler_step, warmup_steps, cosine_steps, scale_grow_interval, validation_interval, batch_size, max_lr, decay_rate, weight_decay):
-    num_clients = 100
-    client_ratio = 0.1
-
-    logs_dir = 'federated_model/logs'
-    checkpoints_dir = 'federated_model/checkpoints/'
-    plots_dir = 'federated_model/plots/'
+def start(num_rounds,
+          num_steps_per_client,
+          num_classes_per_client,
+          rounds_per_scheduler_step,
+          scale_grow_interval,
+          validation_interval,
+          num_clients=config["num_clients"],
+          client_ratio=config["client_ratio"],
+          warmup_scheduler_steps=config["warmup_scheduler_steps"],
+          cosine_scheduler_steps=config["cosine_scheduler_steps"],
+          batch_size=config["batch_size"],
+          max_lr=config["max_lr"],
+          decay_rate=config["decay_rate"],
+          weight_decay=config["weight_decay"],
+          checkpoints_dir=config["checkpoints_dir"],
+          logs_dir=config["logs_dir"],
+          plots_dir=config["plots_dir"]
+          ):
 
     # Init checkpoint manager and logger
     run = {
@@ -213,8 +223,8 @@ def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_s
         'optimizer': 'SGD(momentum=0.9)',
         'scheduler': 'CosineAnnealingLR with warm-up',
         'rounds_per_scheduler_step': rounds_per_scheduler_step,
-        'warmup_scheduler_steps': warmup_steps,
-        'cosine_scheduler_steps': cosine_steps,
+        'warmup_scheduler_steps': warmup_scheduler_steps,
+        'cosine_scheduler_steps': cosine_scheduler_steps,
         'scale_grow_interval': scale_grow_interval,
         'validation_interval': validation_interval,
         'augmentation': 'MixUp/CutMix',
@@ -237,16 +247,88 @@ def start(num_rounds, num_steps_per_client, num_classes_per_client, rounds_per_s
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
+def load_config(path="config.yaml"):
+    with open(path, "r") as f:
+        config = yaml.safe_load(f)
+
+    return config["train_federated"]
+
 if __name__ == '__main__':
-    start(num_rounds=352,
-          num_steps_per_client=4,
-          num_classes_per_client=100,
-          rounds_per_scheduler_step=16,
-          warmup_steps=3,
-          cosine_steps=19,
-          scale_grow_interval=48,
-          validation_interval=12,
-          batch_size=64,
-          max_lr=0.0135,
-          decay_rate=0.78,
-          weight_decay=4.28e-05)
+    config = load_config()
+    parser = argparse.ArgumentParser(description="Start or resume a federated model training.")
+    subparsers = parser.add_subparsers(dest="action", required=True)
+
+    # Start
+    start_parser = subparsers.add_parser(
+        "start",
+        help="Start a new federated training run"
+    )
+
+    start_parser.add_argument(
+        "-r", "--rounds",
+        type=int,
+        default=config["num_rounds"],
+        help="Total number of federated training rounds. (default: config.yaml)"
+    )
+
+    # Resume
+    resume_parser = subparsers.add_parser(
+        "resume",
+        help="Resume an existing federated training run"
+    )
+
+    resume_parser.add_argument(
+        "-n", "--run-name",
+        type=str,
+        required=True,
+        help="Name of the run to resume"
+    )
+
+    resume_parser.add_argument(
+        "-r", "--total-rounds",
+        type=int,
+        default=config["num_rounds"],
+        help="Total number of federated training rounds. (default: config.yaml)"
+    )
+
+    resume_parser.add_argument(
+        "--separate",
+        action="store_true",
+        help=(
+            "Resume training as a new run, preserving the original run's "
+            "checkpoints and logs. (default: false)"
+        )
+    )
+
+    args = parser.parse_args()
+
+    if args.action == "start":
+        start(
+            num_rounds=args.rounds,
+            num_clients=config["num_clients"],
+            client_ratio=config["client_ratio"],
+            num_steps_per_client=config["num_steps_per_client"],
+            num_classes_per_client=config["num_classes_per_client"],
+            rounds_per_scheduler_step=config["rounds_per_scheduler_step"],
+            warmup_scheduler_steps=config["warmup_scheduler_steps"],
+            cosine_scheduler_steps=config["cosine_scheduler_steps"],
+            scale_grow_interval=config["scale_grow_interval"],
+            validation_interval=config["validation_interval"],
+            batch_size=config["batch_size"],
+            max_lr=config["max_lr"],
+            decay_rate=config["decay_rate"],
+            weight_decay=config["weight_decay"],
+            checkpoints_dir=config["checkpoints_dir"],
+            logs_dir=config["logs_dir"],
+            plots_dir=config["plots_dir"]
+        )
+
+    elif args.action == "resume":
+        resume(
+            run_name=args.run_name,
+            total_rounds=args.total_rounds,
+            checkpoints_dir=config["checkpoints_dir"],
+            logs_dir=config["logs_dir"],
+            plots_dir=config["plots_dir"],
+            separate=args.separate
+        )
