@@ -2,7 +2,8 @@ import argparse
 import random
 from pprint import pprint
 
-from train import start
+from train import start, load_config
+
 
 def random_search(num_trials, num_epochs):
     best_accuracy = 0
@@ -20,7 +21,14 @@ def random_search(num_trials, num_epochs):
         print(f"Trial: {trial}/{num_trials}")
         pprint({'batch_size': batch_size, 'max_lr': max_lr, 'decay_rate': decay_rate, 'weight_decay': weight_decay})
 
-        trial = start(num_epochs, batch_size, max_lr, decay_rate, weight_decay)
+        config = load_config()
+        trial = start(num_epochs, batch_size, max_lr, decay_rate, weight_decay,
+                      warmup_epochs=config["warmup_epochs"],
+                      cosine_epochs=config["cosine_epochs"],
+                      checkpoints_dir=config["checkpoints_dir"],
+                      logs_dir=config["logs_dir"],
+                      plots_dir=config["plots_dir"]
+                      )
 
         accuracy = trial['best_accuracy']
         print(f"Best accuracy: {accuracy:.2f}\n")
