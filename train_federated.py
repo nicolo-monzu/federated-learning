@@ -205,12 +205,17 @@ def start(num_rounds,
           weight_decay=config["weight_decay"],
           checkpoints_dir=config["checkpoints_dir"],
           logs_dir=config["logs_dir"],
-          plots_dir=config["plots_dir"]
+          plots_dir=config["plots_dir"],
+          run_name=None
           ):
+
+    # Generate a run name if one was not provided
+    if run_name is None:
+        run_name = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # Init checkpoint manager and logger
     run = {
-        'name': datetime.now().strftime('%Y%m%d_%H%M%S'),
+        'name': run_name,
         'model': 'dino_vits16_100_federated',
         'num_clients': num_clients,
         'num_steps_per_client': num_steps_per_client,
@@ -262,6 +267,13 @@ if __name__ == '__main__':
     start_parser = subparsers.add_parser(
         "start",
         help="Start a new federated training run"
+    )
+
+    start_parser.add_argument(
+        "-n", "--run-name",
+        type=str,
+        default=None,
+        help="Name of the new run. If omitted, a timestamp-based name is generated."
     )
 
     start_parser.add_argument(
@@ -320,7 +332,8 @@ if __name__ == '__main__':
             weight_decay=config["weight_decay"],
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
-            plots_dir=config["plots_dir"]
+            plots_dir=config["plots_dir"],
+            run_name=args.run_name
         )
 
     elif args.action == "resume":

@@ -201,14 +201,18 @@ def resume(run_name, total_epochs, checkpoints_dir, logs_dir, plots_dir, separat
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epochs,
-          cosine_epochs, checkpoints_dir, logs_dir, plots_dir):
+          cosine_epochs, checkpoints_dir, logs_dir, plots_dir, run_name=None):
 
     if DEBUG:
         batch_size = 1
 
+    # Generate a run name if one was not provided
+    if run_name is None:
+        run_name = ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S')
+
     # Init checkpoint manager and logger
     run = {
-        'name': ('debug_' if DEBUG else '') + datetime.now().strftime('%Y%m%d_%H%M%S'),
+        'name': run_name,
         'model': 'dino_vits16_100_centralized',
         'batch_size': batch_size,
         'max_learning_rate': max_lr,
@@ -216,7 +220,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epoch
         'weight_decay': weight_decay,
         'optimizer': 'SGD(momentum=0.9)',
         'scheduler': 'CosineAnnealingLR with warm-up',
-        'warmup_epochs' : warmup_epochs,
+        'warmup_epochs': warmup_epochs,
         'cosine_epochs': cosine_epochs,
         'augmentation': 'MixUp/CutMix',
         'total_epochs': 0,
@@ -264,6 +268,13 @@ if __name__ == '__main__':
     )
 
     start_parser.add_argument(
+        "-n", "--run-name",
+        type=str,
+        default=None,
+        help="Name of the new run. If omitted, a timestamp-based name is generated."
+    )
+
+    start_parser.add_argument(
         "-e", "--epochs",
         type=int,
         default=config["num_epochs"],
@@ -288,7 +299,8 @@ if __name__ == '__main__':
         "--decay-rate",
         type=float,
         default=config["decay_rate"],
-        help="LLRD decay rate. (default: config.yaml)")
+        help="LLRD decay rate. (default: config.yaml)"
+    )
 
     start_parser.add_argument(
         "--weight-decay",
@@ -323,7 +335,6 @@ if __name__ == '__main__':
         help="Resume training as a new run, preserving the original run's checkpoints and logs. (default: false)"
     )
 
-
     args = parser.parse_args()
 
     if args.action == "start":
@@ -337,7 +348,8 @@ if __name__ == '__main__':
             cosine_epochs=config["cosine_epochs"],
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
-            plots_dir=config["plots_dir"]
+            plots_dir=config["plots_dir"],
+            run_name=args.run_name
         )
 
     elif args.action == "resume":
