@@ -116,10 +116,13 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
                 weights_sum[k].div_(num_selected_clients)
                 model_dict[k].copy_(weights_sum[k])
 
+        val_loss, val_acc = None, None
+
         if round % validation_interval == 0  or round == num_rounds:
             model.load_state_dict(model_dict)
             val_loss, val_acc = validate(model, val_loader, criterion)
-            logger.log(round, train_loss, val_loss, val_acc, lr)
+
+        logger.log(round, train_loss, val_loss, val_acc, lr)
 
         # update learning rate
         if round % run['rounds_per_scheduler_step'] == 0:

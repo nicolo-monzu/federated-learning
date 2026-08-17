@@ -75,7 +75,7 @@ class Logger:
         self.logs.append([step, train_loss, val_loss, val_acc, lr])
 
         self.run[self.total_key] = step
-        if val_acc > self.run['best_accuracy']:
+        if val_acc is not None and val_acc > self.run['best_accuracy']:
             self.run[self.best_key] = step
             self.run['best_accuracy'] = val_acc
 

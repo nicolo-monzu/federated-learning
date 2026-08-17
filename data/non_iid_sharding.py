@@ -1,6 +1,9 @@
 import numpy as np
 from torch.utils.data import Subset
 
+# K: number of clients
+# Nc: number of classes per client
+# C: total number of classes in the dataset
 
 def assign_class_to_client(K, Nc, C):
     A = int(Nc * K / C)
