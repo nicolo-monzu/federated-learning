@@ -16,13 +16,13 @@ train_federated:
   client_ratio: 0.1              # C
   num_steps_per_client: 4        # J
   num_classes_per_client: 100    # Nc
-  rounds_per_scheduler_step: 4   # Number of round for a scheduler step (update)
+  rounds_per_scheduler_step: 4   # Number of rounds for a scheduler step (update)
   warmup_scheduler_steps: 13
   cosine_scheduler_steps: 75
-  scale_grow_interval: 48        # Number of round for a scale grow
-  validation_interval: 16        # Number of round for a validation
+  scale_grow_interval: 48        # Number of rounds for a scale grow
+  validation_interval: 16        # Number of rounds for a validation
   batch_size: 64
-  max_lr: 0.014
+  max_lr: 0.007
   decay_rate: 0.78
   weight_decay: 4.3e-05
   checkpoints_dir: 'federated_model/checkpoints/'

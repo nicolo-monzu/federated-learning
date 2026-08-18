@@ -52,6 +52,13 @@ class CheckpointManagerFederated:
         checkpoint = torch.load(self.path)
         self.loaded = checkpoint
 
+        # Check training type
+        if checkpoint['training_type'] != 'federated':
+            raise RuntimeError(
+                f"Checkpoint training type mismatch: expected "
+                f"'federated', got '{checkpoint['training_type']}'."
+            )
+
         self.best_acc = checkpoint['best_accuracy']
         self.best_model_state_dict = checkpoint['best_model_state_dict']
 

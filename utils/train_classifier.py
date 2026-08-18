@@ -24,7 +24,8 @@ cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
 apply_mixup_cutmix = RandomChoice([cutmix, mixup])
 
 def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
-    model.train()
+    model.backbone.eval()
+    model.classifier.train()
     running_loss = 0.0
 
     progress_bar = tqdm(train_loader, f'Train Epoch {epoch}', leave=False)
@@ -140,11 +141,13 @@ def build_training_objects(run):
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
-    # Learning rate decaying
-    parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
+    # Freeze_backbone
+    freeze_backbone(model)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
+    optimizer = torch.optim.SGD(model.classifier.parameters(), lr=run['max_learning_rate'],
+                                momentum=0.9, weight_decay=run['weight_decay'])
+
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
     # Scheduler
@@ -181,7 +184,7 @@ def resume(run_name, total_epochs, checkpoints_dir, logs_dir, plots_dir, separat
 
     if DEBUG:
         if not run['debug']:
-            raise RuntimeError('Attempted to resume in debug mode a non-debug training run')
+            sys.exit('Error: Attempted to resume in debug mode a non debug training')
         print('Debug mode')
 
     print('Using device:', DEVICE)
@@ -267,107 +270,4 @@ def load_config(path="config.yaml"):
     return config["train"]
 
 if __name__ == '__main__':
-    config = load_config()
-    parser = argparse.ArgumentParser(description="Start or resume a centralized model training.")
-    subparsers = parser.add_subparsers(dest="action", required=True)
-
-    # Start
-    start_parser = subparsers.add_parser(
-        "start",
-        help="Start a new training run"
-    )
-
-    start_parser.add_argument(
-        "-n", "--run-name",
-        type=str,
-        default=None,
-        help="Name of the new run. If omitted, a timestamp-based name is generated."
-    )
-
-    start_parser.add_argument(
-        "-e", "--epochs",
-        type=int,
-        default=config["num_epochs"],
-        help="Total number of training epochs. (default: config.yaml)"
-    )
-
-    start_parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=config["batch_size"],
-        help="Batch size. (default: config.yaml)"
-    )
-
-    start_parser.add_argument(
-        "--max-lr",
-        type=float,
-        default=config["max_lr"],
-        help="Maximum learning rate. (default: config.yaml)"
-    )
-
-    start_parser.add_argument(
-        "--decay-rate",
-        type=float,
-        default=config["decay_rate"],
-        help="LLRD decay rate. (default: config.yaml)"
-    )
-
-    start_parser.add_argument(
-        "--weight-decay",
-        type=float,
-        default=config["weight_decay"],
-        help="Weight decay. (default: config.yaml)"
-    )
-
-    # Resume
-    resume_parser = subparsers.add_parser(
-        "resume",
-        help="Resume an existing training run"
-    )
-
-    resume_parser.add_argument(
-        "-n", "--run-name",
-        type=str,
-        required=True,
-        help="Name of the run to resume"
-    )
-
-    resume_parser.add_argument(
-        "-e", "--total-epochs",
-        type=int,
-        default=config["num_epochs"],
-        help="Total number of training epochs. (default: config.yaml)"
-    )
-
-    resume_parser.add_argument(
-        "--separate",
-        action="store_true",
-        help="Resume training as a new run, preserving the original run's checkpoints and logs. (default: false)"
-    )
-
-    args = parser.parse_args()
-
-    if args.action == "start":
-        start(
-            num_epochs=args.epochs,
-            batch_size=args.batch_size,
-            max_lr=args.max_lr,
-            decay_rate=args.decay_rate,
-            weight_decay=args.weight_decay,
-            warmup_epochs=config["warmup_epochs"],
-            cosine_epochs=config["cosine_epochs"],
-            checkpoints_dir=config["checkpoints_dir"],
-            logs_dir=config["logs_dir"],
-            plots_dir=config["plots_dir"],
-            run_name=args.run_name
-        )
-
-    elif args.action == "resume":
-        resume(
-            run_name=args.run_name,
-            total_epochs=args.total_epochs,
-            checkpoints_dir=config["checkpoints_dir"],
-            logs_dir=config["logs_dir"],
-            plots_dir=config["plots_dir"],
-            separate=args.separate
-        )
+    start()
