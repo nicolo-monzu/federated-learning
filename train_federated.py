@@ -152,8 +152,8 @@ def build_training_objects(run):
     clients = [Client(model, criterion, dataloader) for dataloader in train_loaders]
 
     # Scheduler
-    warmup_scheduler_steps = run['warmup_steps']
-    cosine_scheduler_steps = run['cosine_steps']
+    warmup_scheduler_steps = run['warmup_scheduler_steps']
+    cosine_scheduler_steps = run['cosine_scheduler_steps']
     dummy_optimizer = torch.optim.SGD([torch.zeros(1, requires_grad=True)], lr=run['max_learning_rate'])
     warmup_sched = LinearLR(dummy_optimizer, start_factor=0.1, total_iters=warmup_scheduler_steps + 1)
     cosine_sched = CosineAnnealingLR(dummy_optimizer, T_max=cosine_scheduler_steps)
@@ -198,7 +198,7 @@ def resume(run_name, total_rounds, checkpoints_dir, logs_dir, plots_dir, separat
     print(f'Run name: {run['name']}')
     print('Resume training')
     train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, run['validation_interval'], round + 1, scale)
-    plot_training(run_name, logs_dir, plots_dir)
+    plot_training(run_name, logs_dir, plots_dir, federated=True)
     return logger.get_run()
 
 def start(num_rounds,
@@ -270,7 +270,7 @@ def start(num_rounds,
     print(f'Run name: {run['name']}')
     print('Start training')
     train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval)
-    plot_training(run['name'], logs_dir, plots_dir)
+    plot_training(run['name'], logs_dir, plots_dir, federated=True)
     return logger.get_run()
 
 if __name__ == '__main__':
