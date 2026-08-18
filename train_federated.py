@@ -85,7 +85,8 @@ def running_sum(current, next_state):
                 current[k].add_(next_state[k])
     return current
 
-def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, start_round = 1, grad_scale = 2**16):
+def train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger,
+                    manager, validation_interval, patience, start_round = 1, grad_scale = 2**16):
     lr = scheduler.optimizer.param_groups[0]["lr"]
 
     # Dict to pass to clients
@@ -138,6 +139,10 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
         if round % validation_interval == 0 or round == num_rounds:
             manager.save(round, model, grad_scale, scheduler, logger, val_acc)
 
+        # Early stopping
+        if (run['total_rounds'] - run['best_round']) // validation_interval >= patience:
+            break
+
 
 def build_training_objects(run):
     # Import data
@@ -168,7 +173,7 @@ def build_training_objects(run):
     return clients, val_loader, model, criterion, scheduler
 
 
-def resume(run_name, total_rounds, checkpoints_dir, logs_dir, plots_dir, separate=False):
+def resume(run_name, total_rounds, patience, checkpoints_dir, logs_dir, plots_dir, separate=False):
 
     # Cleanup, restoring files and checkpoint loading
     manager = CheckpointManagerFederated(checkpoints_dir, run_name)
@@ -197,7 +202,10 @@ def resume(run_name, total_rounds, checkpoints_dir, logs_dir, plots_dir, separat
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, run['validation_interval'], round + 1, scale)
+
+    train_federated(total_rounds, run, model, clients, val_loader, criterion, scheduler,
+                    logger, manager, run['validation_interval'], patience, round + 1, scale)
+
     plot_training(run_name, logs_dir, plots_dir, federated=True)
     return logger.get_run()
 
@@ -215,6 +223,7 @@ def start(num_rounds,
           max_lr=config["max_lr"],
           decay_rate=config["decay_rate"],
           weight_decay=config["weight_decay"],
+          patience=config["patience"],
           checkpoints_dir=config["checkpoints_dir"],
           logs_dir=config["logs_dir"],
           plots_dir=config["plots_dir"],
@@ -269,7 +278,7 @@ def start(num_rounds,
     # Run the training process for {num_rounds} rounds
     print(f'Run name: {run['name']}')
     print('Start training')
-    train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval)
+    train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, patience)
     plot_training(run['name'], logs_dir, plots_dir, federated=True)
     return logger.get_run()
 
@@ -344,6 +353,7 @@ if __name__ == '__main__':
             max_lr=config["max_lr"],
             decay_rate=config["decay_rate"],
             weight_decay=config["weight_decay"],
+            patience=config["patience"],
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
             plots_dir=config["plots_dir"],
@@ -354,6 +364,7 @@ if __name__ == '__main__':
         resume(
             run_name=args.run_name,
             total_rounds=args.total_rounds,
+            patience=config["patience"],
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
             plots_dir=config["plots_dir"],

@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 from datetime import datetime
 import torch
 import yaml
@@ -86,7 +85,9 @@ def validate(model, val_loader, criterion):
     return val_loss, val_accuracy
 
 
-def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, start_epoch=1):
+def train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer,
+          scaler, scheduler, logger, manager, patience, start_epoch=1):
+
     for epoch in range(start_epoch, num_epochs + 1):
         train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler)
 
@@ -101,6 +102,10 @@ def train(num_epochs, model, train_loader, val_loader, criterion, optimizer, sca
 
         # Checkpoint
         manager.save(epoch, model, optimizer, scaler, scheduler, logger, val_acc)
+
+        # Early stopping
+        if run['total_epochs'] - run['best_epoch'] >= patience:
+            break
 
 
     print(f'Best validation accuracy: {logger.get_best_accuracy():.2f}%')
@@ -163,7 +168,7 @@ def build_training_objects(run):
     return train_loader, val_loader, model, criterion, optimizer, scaler, scheduler
 
 
-def resume(run_name, total_epochs, checkpoints_dir, logs_dir, plots_dir, separate=False):
+def resume(run_name, total_epochs, patience, checkpoints_dir, logs_dir, plots_dir, separate=False):
 
     # Cleanup, restoring files and checkpoint loading
     manager = CheckpointManager(checkpoints_dir, run_name)
@@ -197,12 +202,12 @@ def resume(run_name, total_epochs, checkpoints_dir, logs_dir, plots_dir, separat
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(total_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, epoch + 1)
+    train(total_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, epoch + 1)
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epochs,
-          cosine_epochs, checkpoints_dir, logs_dir, plots_dir, run_name=None):
+          cosine_epochs, patience, checkpoints_dir, logs_dir, plots_dir, run_name=None):
 
     if DEBUG:
         batch_size = 1
@@ -255,7 +260,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epoch
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager)
+    train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience)
     plot_training(run['name'], logs_dir, plots_dir)
     return logger.get_run()
 
@@ -356,6 +361,7 @@ if __name__ == '__main__':
             weight_decay=args.weight_decay,
             warmup_epochs=config["warmup_epochs"],
             cosine_epochs=config["cosine_epochs"],
+            patience=config["patience"],
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
             plots_dir=config["plots_dir"],
@@ -366,6 +372,7 @@ if __name__ == '__main__':
         resume(
             run_name=args.run_name,
             total_epochs=args.total_epochs,
+            patience=config["patience"],
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
             plots_dir=config["plots_dir"],

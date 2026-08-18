@@ -6,6 +6,7 @@ train:
   weight_decay: 4.3e-05
   warmup_epochs: 3
   cosine_epochs: 17
+  patience: 3
   checkpoints_dir: 'centralized_model/checkpoints/'
   logs_dir: 'centralized_model/logs/'
   plots_dir: 'centralized_model/plots/'
@@ -25,6 +26,7 @@ train_federated:
   max_lr: 0.007
   decay_rate: 0.78
   weight_decay: 4.3e-05
+  patience: 3                    # Number of VALIDATIONS to wait for an improvement before early stopping
   checkpoints_dir: 'federated_model/checkpoints/'
   logs_dir: 'federated_model/logs/'
   plots_dir: 'federated_model/plots/'
