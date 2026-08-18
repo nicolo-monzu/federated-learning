@@ -1,6 +1,7 @@
 import argparse
 import os
 import random
+import warnings
 from datetime import datetime
 import torch
 import yaml
@@ -128,7 +129,11 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
 
         # update learning rate
         if round % run['rounds_per_scheduler_step'] == 0:
-            scheduler.step()
+            with warnings.catch_warnings():
+                # Suppression of "UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`."
+                warnings.simplefilter('ignore', UserWarning)
+                scheduler.step()
+
             lr = scheduler.optimizer.param_groups[0]["lr"]
 
         # update scale
