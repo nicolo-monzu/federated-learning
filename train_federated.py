@@ -184,7 +184,7 @@ def resume(run_name, total_rounds, patience, checkpoints_dir, logs_dir, plots_di
     manager = CheckpointManagerFederated(checkpoints_dir, run_name)
     logger_state_dict, round = manager.resume()
 
-    logger = Logger(logs_dir, run_name)
+    logger = Logger(logs_dir, run_name, federated=True)
     logger.resume(logger_state_dict)
 
     if separate:
@@ -273,7 +273,7 @@ def start(num_rounds,
         'best_accuracy': -1.0,
     }
     manager = CheckpointManagerFederated(checkpoints_dir, run['name'])
-    logger = Logger(logs_dir, run['name'], step_name="round", total_key="total_rounds", best_key="best_round")
+    logger = Logger(logs_dir, run['name'], federated=True)
     logger.start(run)
 
     print('Using device:', DEVICE)

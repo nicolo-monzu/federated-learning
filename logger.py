@@ -5,14 +5,19 @@ import shutil
 
 
 class Logger:
-    def __init__(self, directory, run_name, step_name="epoch", total_key="total_epochs", best_key="best_epoch"):
+    def __init__(self, directory, run_name, federated=False):
         os.makedirs(directory, exist_ok=True)
         self.dir = directory
         self.log_path = f'{directory}/{run_name}_log.csv'
         self.det_path = f'{directory}/{run_name}.json'
-        self.step_name = step_name
-        self.total_key = total_key
-        self.best_key = best_key
+        if federated:
+            self.step_name = "round"
+            self.total_key = "total_rounds"
+            self.best_key = "best_round"
+        else:
+            self.step_name = "epoch"
+            self.total_key = "total_rounds"
+            self.best_key = "best_round"
         self.run = None
         self.logs = None
 
