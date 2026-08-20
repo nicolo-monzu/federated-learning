@@ -7,7 +7,7 @@ import torch
 import yaml
 from torch import nn
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, MultiplicativeLR, SequentialLR
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from checkpoint_manager_federated import CheckpointManagerFederated
 from data.dataloader import DEVICE
@@ -243,7 +243,7 @@ def start(num_rounds,
         print(
             f'Error: checkpoint "{run_name}.pth" already exists. '
             'Training cannot start with this run name. '
-            'Use "train.py resume" to continue from the existing checkpoint, '
+            'Use "train_federated.py resume" to continue from the existing checkpoint, '
             'or remove/rename the checkpoint to start a new training run with this name.'
         )
         return {'best_accuracy': -1}

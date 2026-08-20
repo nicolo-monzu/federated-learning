@@ -22,8 +22,12 @@ mixup = MixUp(num_classes=NUM_CLASSES, alpha=0.8)
 cutmix = CutMix(num_classes=NUM_CLASSES, alpha=1.0)
 apply_mixup_cutmix = RandomChoice([cutmix, mixup])
 
-def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler):
-    model.train()
+def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler, classifier_only=False):
+    if classifier_only:
+        model.backbone.eval()
+        model.classifier.train()
+    else:
+        model.train()
     running_loss = 0.0
 
     progress_bar = tqdm(train_loader, f'Train Epoch {epoch}', leave=False)
@@ -86,10 +90,10 @@ def validate(model, val_loader, criterion):
 
 
 def train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer,
-          scaler, scheduler, logger, manager, patience, start_epoch=1):
+          scaler, scheduler, logger, manager, patience, start_epoch=1, classifier_only=False):
 
     for epoch in range(start_epoch, num_epochs + 1):
-        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler)
+        train_loss, lr = train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler, classifier_only)
 
         # At the end of each training iteration, perform a validation step
         val_loss, val_acc = validate(model, val_loader, criterion)
@@ -138,18 +142,32 @@ def apply_llrd(model, learning_rate, decay_rate):
     return param_groups
 
 
-def build_training_objects(run):
+def freeze_backbone(model):
+    for param in model.backbone.parameters():
+        param.requires_grad = False
+
+
+def build_training_objects(run, classifier_only=False):
     # Import data
     train_loader, val_loader = create_dataloaders(run['batch_size'])
 
     # Define model
     model = Dino_vits16_100().to(DEVICE)
 
-    # Learning rate decaying
-    parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
+    if classifier_only:
+        # Freeze_backbone
+        freeze_backbone(model)
+
+        optimizer = torch.optim.SGD(model.classifier.parameters(), lr=run['max_learning_rate'],
+                                    momentum=0.9, weight_decay=run['weight_decay'])
+    else:
+        # Learning rate decaying
+        parameters = apply_llrd(model, run['max_learning_rate'], run['decay_rate'])
+
+        optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(parameters, momentum=0.9, weight_decay=run['weight_decay'])
+
     scaler = torch.amp.GradScaler("cuda", enabled=USE_AMP)
 
     # Scheduler
@@ -168,10 +186,10 @@ def build_training_objects(run):
     return train_loader, val_loader, model, criterion, optimizer, scaler, scheduler
 
 
-def resume(run_name, total_epochs, patience, checkpoints_dir, logs_dir, plots_dir, separate=False):
+def resume(run_name, total_epochs, patience, checkpoints_dir, logs_dir, plots_dir, separate=False, classifier_only=False):
 
     # Cleanup, restoring files and checkpoint loading
-    manager = CheckpointManager(checkpoints_dir, run_name)
+    manager = CheckpointManager(checkpoints_dir, run_name, classifier_only)
     logger_state_dict, epoch = manager.resume()
 
     logger = Logger(logs_dir, run_name)
@@ -194,7 +212,7 @@ def resume(run_name, total_epochs, patience, checkpoints_dir, logs_dir, plots_di
     if USE_AMP:
         print('Using automatic mixed precision')
 
-    train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run)
+    train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run, classifier_only)
 
     # Restore state
     manager.restore_state(model, optimizer, scaler, scheduler)
@@ -202,12 +220,12 @@ def resume(run_name, total_epochs, patience, checkpoints_dir, logs_dir, plots_di
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Resume training')
-    train(total_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, epoch + 1)
+    train(total_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, epoch + 1, classifier_only)
     plot_training(run_name, logs_dir, plots_dir)
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epochs,
-          cosine_epochs, patience, checkpoints_dir, logs_dir, plots_dir, run_name=None):
+          cosine_epochs, patience, checkpoints_dir, logs_dir, plots_dir, run_name=None, classifier_only=False):
 
     if DEBUG:
         batch_size = 1
@@ -243,7 +261,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epoch
         'best_accuracy': -1.0,
         'debug': DEBUG
     }
-    manager = CheckpointManager(checkpoints_dir, run['name'])
+    manager = CheckpointManager(checkpoints_dir, run['name'], classifier_only)
     logger = Logger(logs_dir, run['name'])
     logger.start(run)
 
@@ -255,13 +273,18 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epoch
     if USE_AMP:
         print('Using automatic mixed precision')
 
-    train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run)
+    train_loader, val_loader, model, criterion, optimizer, scaler, scheduler = build_training_objects(run, classifier_only)
 
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience)
+    train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, 0, classifier_only)
     plot_training(run['name'], logs_dir, plots_dir)
+
+    if classifier_only:
+        # Save a file with only the head
+        torch.save(model.classifier.state_dict(), f'{checkpoints_dir}/{run_name}.head.pth')
+
     return logger.get_run()
 
 
@@ -324,6 +347,12 @@ if __name__ == '__main__':
         help="Weight decay. (default: config.yaml)"
     )
 
+    start_parser.add_argument(
+        "--classifier-only",
+        action="store_true",
+        help="Train only the classifier. (default: false)"
+    )
+
     # Resume
     resume_parser = subparsers.add_parser(
         "resume",
@@ -350,6 +379,12 @@ if __name__ == '__main__':
         help="Resume training as a new run, preserving the original run's checkpoints and logs. (default: false)"
     )
 
+    resume_parser.add_argument(
+        "--classifier-only",
+        action="store_true",
+        help="Train only the classifier. (default: false)"
+    )
+
     args = parser.parse_args()
 
     if args.action == "start":
@@ -365,7 +400,8 @@ if __name__ == '__main__':
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
             plots_dir=config["plots_dir"],
-            run_name=args.run_name
+            run_name=args.run_name,
+            classifier_only = args.classifier_only
         )
 
     elif args.action == "resume":
@@ -376,5 +412,6 @@ if __name__ == '__main__':
             checkpoints_dir=config["checkpoints_dir"],
             logs_dir=config["logs_dir"],
             plots_dir=config["plots_dir"],
-            separate=args.separate
+            separate=args.separate,
+            classifier_only=args.classifier_only
         )
