@@ -108,7 +108,7 @@ def train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer
         manager.save(epoch, model, optimizer, scaler, scheduler, logger, val_acc)
 
         # Early stopping
-        if run['total_epochs'] - run['best_epoch'] >= patience:
+        if patience > 0 and run['total_epochs'] - run['best_epoch'] >= patience:
             break
 
 

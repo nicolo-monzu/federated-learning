@@ -145,7 +145,7 @@ def train_federated(num_rounds, run, model, clients, val_loader, criterion, sche
             manager.save(round, model, grad_scale, scheduler, logger, val_acc)
 
         # Early stopping
-        if (run['total_rounds'] - run['best_round']) // validation_interval >= patience:
+        if patience > 0 and (run['total_rounds'] - run['best_round']) // validation_interval >= patience:
             break
 
 
