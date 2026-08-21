@@ -114,11 +114,14 @@ def train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer
 
     print(f'Best validation accuracy: {logger.get_best_accuracy():.2f}%')
 
-def apply_llrd(model, learning_rate, decay_rate):
+def apply_llrd(model, learning_rate, decay_rate, backbone_only=False):
     # Assign a lr to each layer
 
-    # classifier
-    param_groups = [{"params": model.classifier.parameters(), "lr": learning_rate}]
+    param_groups = []
+
+    if not backbone_only:
+        # classifier
+        param_groups.append({"params": model.classifier.parameters(), "lr": learning_rate})
 
     # norm
     learning_rate *= decay_rate
@@ -155,7 +158,7 @@ def build_training_objects(run, classifier_only=False):
     model = Dino_vits16_100().to(DEVICE)
 
     if classifier_only:
-        # Freeze_backbone
+        # Freeze backbone
         freeze_backbone(model)
 
         optimizer = torch.optim.SGD(model.classifier.parameters(), lr=run['max_learning_rate'],
@@ -222,6 +225,11 @@ def resume(run_name, total_epochs, patience, checkpoints_dir, logs_dir, plots_di
     print('Resume training')
     train(total_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, epoch + 1, classifier_only)
     plot_training(run_name, logs_dir, plots_dir)
+
+    if classifier_only:
+        # Save a file with only the head
+        torch.save(model.classifier.state_dict(), f'{checkpoints_dir}/{run_name}.head.pth')
+
     return logger.get_run()
 
 def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epochs,
