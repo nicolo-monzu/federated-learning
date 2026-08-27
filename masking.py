@@ -37,7 +37,9 @@ class ModelMasker:
 
 
 @torch.no_grad()
-def update_masks(masks, scores, density):
+def update_masks(masks, scores, density, mask_rule):
+    # Note: mask_rule only affects printing behavior
+
     global_scores = torch.cat([score.flatten() for score in scores.values()])
     global_masks = torch.cat([masks[name].flatten() for name in scores])
 
@@ -66,7 +68,10 @@ def update_masks(masks, scores, density):
             tot += mask.numel()
             not_masked += int(mask.sum().item())
 
-    masked = int(tot - not_masked)
+    if mask_rule == MaskRule.LEAST_SENSITIVE:
+        masked = tot - not_masked
+    else: # Most sensitive
+        masked = not_masked
     print(f'[+] Masked weights: {masked / tot} ({masked} / {tot})')
 
 
@@ -79,7 +84,9 @@ def running_sum(current, next_scores):
     return current
 
 
-def calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule):
+def keep_least_sensitive(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule):
+    # Note: mask_rule only affects printing behavior
+
     density = 1.0 - sparsity
 
     masker = ModelMasker(model)
@@ -94,7 +101,10 @@ def calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibra
         for round in range(1, num_calibration_round + 1):
             print(f'Calibration round: {round}')
             round_density = density ** (round / num_calibration_round)
-            print('[+] Target sparsity:', 1 - round_density)
+            if mask_rule == MaskRule.LEAST_SENSITIVE:
+                print('[+] Target sparsity:', 1 - round_density)
+            else: # Most sensitive
+                print('[+] Target sparsity:', round_density)
 
             total_scores = None
             num_clients = len(clients)
@@ -104,7 +114,7 @@ def calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibra
                 scores = compute_local_sensitivity(model, client.train_loader)
                 total_scores = running_sum(total_scores, scores)
 
-            update_masks(masks, total_scores, round_density)
+            update_masks(masks, total_scores, round_density, mask_rule)
             masker.mask(model, masks)
 
     masker.restore(model)
@@ -170,3 +180,30 @@ def compute_local_sensitivity(model, loader, num_batches=1, microbatch_size=16):
 
     return sensitivity
 
+
+def calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule):
+    match mask_rule:
+        case MaskRule.LEAST_SENSITIVE:
+            mask = keep_least_sensitive(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule)
+        case MaskRule.MOST_SENSITIVE:
+            mask = keep_least_sensitive(model, clients, client_ratio, 1 - sparsity, num_calibration_round, mask_rule)
+            # Invert mask
+            mask = {
+                k: torch.ones_like(v) - v
+                for k, v in mask.items()
+            }
+        case MaskRule.LOWEST_MAGNITUDE:
+            mask = None
+        case MaskRule.HIGHEST_MAGNITUDE:
+            mask = None
+        case MaskRule.RANDOM:
+            mask = None
+        case _:
+            raise ValueError(f"Invalid mask rule: {mask_rule}")
+
+    # Disable grad on model parameters whose corresponding mask is entirely zero
+    for name, param in model.named_parameters():
+        if name in mask and torch.count_nonzero(mask[name]) == 0:
+            param.requires_grad_(False)
+
+    return mask
