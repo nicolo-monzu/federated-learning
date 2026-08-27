@@ -16,8 +16,8 @@ class Logger:
             self.best_key = "best_round"
         else:
             self.step_name = "epoch"
-            self.total_key = "total_rounds"
-            self.best_key = "best_round"
+            self.total_key = "total_epochs"
+            self.best_key = "best_epoch"
         self.run = None
         self.logs = None
 

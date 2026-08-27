@@ -286,7 +286,7 @@ def start(num_epochs, batch_size, max_lr, decay_rate, weight_decay, warmup_epoch
     # Run the training process for {num_epochs} epochs
     print(f'Run name: {run['name']}')
     print('Start training')
-    train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, 0, classifier_only)
+    train(num_epochs, run, model, train_loader, val_loader, criterion, optimizer, scaler, scheduler, logger, manager, patience, classifier_only=classifier_only)
     plot_training(run['name'], logs_dir, plots_dir)
 
     if classifier_only:

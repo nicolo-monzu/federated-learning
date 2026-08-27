@@ -1,23 +1,22 @@
 import torch
 import os
 
-def save(checkpoint, filename):
-    torch.save(checkpoint, filename+'.tmp')
-    os.replace(filename+'.tmp', filename)
+from checkpoint_manager import save
 
 class CheckpointManagerFederated:
-    def __init__(self, directory, run_name):
+    def __init__(self, directory, run_name, sparse=False):
         os.makedirs(directory, exist_ok=True)
         self.dir = directory
         self.path = f'{directory}/{run_name}.pth'
         self.best_acc = -1.0
         self.best_model_state_dict = None
         self.loaded = None
+        self.sparse = sparse
 
     def set_run_name(self, run_name):
         self.path = f'{self.dir}/{run_name}.pth'
 
-    def save(self, round, model, scale, scheduler, logger, val_acc):
+    def save(self, round, model, scale, scheduler, logger, val_acc, mask=None):
         # Update if best model
         if val_acc > self.best_acc:
             self.best_acc = val_acc
@@ -25,8 +24,10 @@ class CheckpointManagerFederated:
                 k: v.detach().to('cpu', copy=True) for k, v in model.state_dict().items()
             }
 
+        training_type = 'federated_sparse' if self.sparse else 'federated'
+
         checkpoint = {
-            'training_type': 'federated',
+            'training_type': training_type,
             # Last
             'round': round,
             'model_state_dict': model.state_dict(),
@@ -38,6 +39,9 @@ class CheckpointManagerFederated:
             'best_model_state_dict': self.best_model_state_dict,
             'best_accuracy': self.best_acc
         }
+        if self.sparse:
+            checkpoint['mask'] = mask
+
         save(checkpoint, self.path)
 
 
@@ -53,10 +57,11 @@ class CheckpointManagerFederated:
         self.loaded = checkpoint
 
         # Check training type
-        if checkpoint['training_type'] != 'federated':
+        expected_training_type = 'federated_sparse' if self.sparse else 'federated'
+        if checkpoint['training_type'] != expected_training_type:
             raise RuntimeError(
                 f"Checkpoint training type mismatch: expected "
-                f"'federated', got '{checkpoint['training_type']}'."
+                f"'{expected_training_type}', got '{checkpoint['training_type']}'."
             )
 
         self.best_acc = checkpoint['best_accuracy']
@@ -70,9 +75,14 @@ class CheckpointManagerFederated:
             raise RuntimeError("No checkpoint loaded to restore state from.")
         model.load_state_dict(self.loaded['model_state_dict'])
 
+        if self.sparse:
+            mask = self.loaded['mask']
+            for client in clients:
+                client.set_mask(mask)
+
         scale = self.loaded['scale']
 
         scheduler.load_state_dict(self.loaded['scheduler_state_dict'])
 
         self.loaded = None # Free memory
-        return scale
+        return scale, mask

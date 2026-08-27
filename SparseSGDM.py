@@ -10,7 +10,7 @@ class SparseSGDM(Optimizer):
         lr: float = 1e-3,
         momentum: float = 0,
         weight_decay: float = 0,
-        masks: dict[str, Tensor] | None = None,
+        masks: dict[Tensor, Tensor] | None = None,
     ) -> None:
         if lr < 0.0:
             raise ValueError(f"Invalid learning rate: {lr}")
