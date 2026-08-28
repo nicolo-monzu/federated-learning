@@ -232,6 +232,8 @@ def start(num_rounds,
     for client in clients:
         client.set_mask(mask)
 
+    manager.save(0, model, 2**16, scheduler, logger, -1.0, mask)
+
     # Run the training process for {num_rounds} rounds
     print(f'Run name: {run['name']}')
     print('Start training')

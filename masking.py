@@ -124,7 +124,7 @@ def keep_least_sensitive(model, clients, client_ratio, sparsity, num_calibration
     return masks
 
 
-def compute_local_sensitivity(model, loader, num_batches=1, microbatch_size=16):
+def compute_local_sensitivity(model, loader, num_batches=2, microbatch_size=16):
     model.to(DEVICE)
     model.eval()
 
