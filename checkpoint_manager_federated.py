@@ -31,6 +31,7 @@ class CheckpointManagerFederated:
             # Last
             'round': round,
             'model_state_dict': model.state_dict(),
+            'dummy_optimizer_state_dict': scheduler.optimizer.state_dict(),
             'scale': scale,
             'scheduler_state_dict': scheduler.state_dict(),
             'logger_state_dict': logger.state_dict(),
@@ -79,9 +80,11 @@ class CheckpointManagerFederated:
             mask = self.loaded['mask']
             for client in clients:
                 client.set_mask(mask)
+        else:
+            mask = None
 
+        scheduler.optimizer.load_state_dict(self.loaded['dummy_optimizer_state_dict'])
         scale = self.loaded['scale']
-
         scheduler.load_state_dict(self.loaded['scheduler_state_dict'])
 
         self.loaded = None # Free memory
