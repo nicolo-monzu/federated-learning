@@ -201,7 +201,7 @@ def pick_by_magnitude(model, sparsity, mask_rule):
         max(
             1,
             min(
-                int((1-sparsity) * global_scores.numel()),
+                int(sparsity * global_scores.numel()),
                 global_scores.numel() - 1
             )
         )
@@ -232,13 +232,35 @@ def pick_randomly(model, sparsity):
         if param.requires_grad
     }
 
+    scores = {
+        name: torch.rand_like(param)
+        for name, param in model.named_parameters()
+        if param.requires_grad
+    }
+
+    global_scores = torch.cat([score.flatten() for score in scores.values()])
+
+    t, _ = torch.kthvalue(
+        global_scores,
+        max(
+            1,
+            min(
+                int(sparsity * global_scores.numel()),
+                global_scores.numel() - 1
+            )
+        )
+    )
+
     tot, not_masked = 0, 0
 
     for name, mask in masks.items():
-        mask.bernoulli_(1 - sparsity)
+        if name in scores:
+            score = scores[name]
 
-        tot += mask.numel()
-        not_masked += int(mask.sum().item())
+            mask.copy_((score > t).to(dtype=mask.dtype))
+
+            tot += mask.numel()
+            not_masked += int(mask.sum().item())
 
     masked = tot - not_masked
     print(f'[+] Masked weights: {masked / tot} ({masked} / {tot})')

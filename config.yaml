@@ -43,9 +43,13 @@ train_federated_sparse:
   cosine_scheduler_steps: 75
   scale_grow_interval: 48        # Number of rounds for a scale grow
   validation_interval: 16        # Number of rounds for a validation
-  sparsity: 0.5
-  num_calibration_round: 1
-  mask_rule: 0
+  sparsity: 0.4
+  num_calibration_round: 10
+  mask_rule: 0                   # 0: pick least sensitive
+                                 # 1: pick most sensitive
+                                 # 2: pick lowest magnitude
+                                 # 3: pick highest magnitude
+                                 # 4: pick randomly
   batch_size: 64
   max_lr: 0.007
   decay_rate: 0.78
