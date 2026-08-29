@@ -84,7 +84,7 @@ def running_sum(current, next_scores):
     return current
 
 
-def keep_least_sensitive(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule):
+def pick_least_sensitive(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule):
     # Note: mask_rule only affects printing behavior
 
     density = 1.0 - sparsity
@@ -181,23 +181,86 @@ def compute_local_sensitivity(model, loader, num_batches=2, microbatch_size=16):
     return sensitivity
 
 
+def pick_by_magnitude(model, sparsity, mask_rule):
+    masks = {
+        name: torch.ones_like(param)
+        for name, param in model.named_parameters()
+        if param.requires_grad
+    }
+
+    scores = {
+        name: param.abs() if mask_rule == MaskRule.HIGHEST_MAGNITUDE else -param.abs()
+        for name, param in model.named_parameters()
+        if param.requires_grad
+    }
+
+    global_scores = torch.cat([score.flatten() for score in scores.values()])
+
+    t, _ = torch.kthvalue(
+        global_scores,
+        max(
+            1,
+            min(
+                int((1-sparsity) * global_scores.numel()),
+                global_scores.numel() - 1
+            )
+        )
+    )
+
+    print('[+] Threshold:', t.item() if mask_rule == MaskRule.HIGHEST_MAGNITUDE else -t.item())
+    tot, not_masked = 0, 0
+
+    for name, mask in masks.items():
+        if name in scores:
+            score = scores[name]
+
+            mask.copy_((score > t).to(dtype=mask.dtype))
+
+            tot += mask.numel()
+            not_masked += int(mask.sum().item())
+
+    masked = tot - not_masked
+    print(f'[+] Masked weights: {masked / tot} ({masked} / {tot})')
+
+    return masks
+
+
+def pick_randomly(model, sparsity):
+    masks = {
+        name: torch.ones_like(param)
+        for name, param in model.named_parameters()
+        if param.requires_grad
+    }
+
+    tot, not_masked = 0, 0
+
+    for name, mask in masks.items():
+        mask.bernoulli_(1 - sparsity)
+
+        tot += mask.numel()
+        not_masked += int(mask.sum().item())
+
+    masked = tot - not_masked
+    print(f'[+] Masked weights: {masked / tot} ({masked} / {tot})')
+
+    return masks
+
+
 def calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule):
     match mask_rule:
         case MaskRule.LEAST_SENSITIVE:
-            mask = keep_least_sensitive(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule)
+            mask = pick_least_sensitive(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule)
         case MaskRule.MOST_SENSITIVE:
-            mask = keep_least_sensitive(model, clients, client_ratio, 1 - sparsity, num_calibration_round, mask_rule)
+            mask = pick_least_sensitive(model, clients, client_ratio, 1 - sparsity, num_calibration_round, mask_rule)
             # Invert mask
             mask = {
                 k: torch.ones_like(v) - v
                 for k, v in mask.items()
             }
-        case MaskRule.LOWEST_MAGNITUDE:
-            mask = None
-        case MaskRule.HIGHEST_MAGNITUDE:
-            mask = None
+        case MaskRule.LOWEST_MAGNITUDE | MaskRule.HIGHEST_MAGNITUDE:
+            mask = pick_by_magnitude(model, sparsity, mask_rule)
         case MaskRule.RANDOM:
-            mask = None
+            mask = pick_randomly(model, sparsity)
         case _:
             raise ValueError(f"Invalid mask rule: {mask_rule}")
 
