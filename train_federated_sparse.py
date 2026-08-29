@@ -224,7 +224,7 @@ def start(num_rounds,
     clients, val_loader, model, criterion, scheduler = build_training_objects(run)
 
     # Load pre-trained head
-    classifier_dict = torch.load(head_path)
+    classifier_dict = torch.load(head_path, map_location=DEVICE)
     model.classifier.load_state_dict(classifier_dict)
 
     mask = calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule)

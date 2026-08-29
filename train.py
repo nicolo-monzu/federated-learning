@@ -57,7 +57,7 @@ def train_one_epoch(epoch, model, train_loader, criterion, optimizer, scaler, cl
 
 
 # Validation loop
-def validate(model, val_loader, criterion):
+def validate(model, val_loader, criterion, print_res=True):
     model.eval()
     val_loss = 0.0
 
@@ -85,7 +85,8 @@ def validate(model, val_loader, criterion):
     val_loss /= total
     val_accuracy = 100. * correct / total
 
-    print(f'Validation Loss: {val_loss:.6f} Acc: {val_accuracy:.2f}%')
+    if print_res:
+        print(f'Validation Loss: {val_loss:.6f} Acc: {val_accuracy:.2f}%')
     return val_loss, val_accuracy
 
 
