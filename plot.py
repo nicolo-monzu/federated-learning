@@ -54,7 +54,7 @@ def plot_training(run_name, logs_dir, save_dir=None, federated=False):
 
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
-        plt.savefig(f"{save_dir}/{run_name}_loss_plot")
+        plt.savefig(f"{save_dir}/{run_name}_loss_plot.png")
     else:
         plt.show()
 
@@ -75,7 +75,7 @@ def plot_training(run_name, logs_dir, save_dir=None, federated=False):
     plt.tight_layout()
 
     if save_dir:
-        plt.savefig(f"{save_dir}/{run_name}_acc_plot")
+        plt.savefig(f"{save_dir}/{run_name}_acc_plot.png")
     else:
         plt.show()
 
