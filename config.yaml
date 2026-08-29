@@ -55,4 +55,4 @@ train_federated_sparse:
   checkpoints_dir: 'federated_sparse_model/checkpoints/'
   logs_dir: 'federated_sparse_model/logs/'
   plots_dir: 'federated_sparse_model/plots/'
-  head_path: ''
+  head_path: 'models/pretrained_classifier.head.pth'
