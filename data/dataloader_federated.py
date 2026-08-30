@@ -11,6 +11,10 @@ from .dataloader import DEVICE, transform_train, transform_val
 from .iid_sharding import split_subset_iid
 from .non_iid_sharding import split_subset_non_iid
 
+# K: number of clients
+# Nc: number of classes per client
+# C: total number of classes in the dataset
+
 def create_dataloader_federated(batch_size, num_clients, num_classes_per_client):
     rng = random.Random(1234)
 
@@ -30,13 +34,16 @@ def create_dataloader_federated(batch_size, num_clients, num_classes_per_client)
     train_idx, val_idx = train_test_split(list(range(len(dataset))), test_size=0.1, random_state=1234, stratify=dataset.targets)
 
 
-    # Note: The iid algorithm implemented need K = C = Nc. If an iid run has K != C, the algorith executed is non-iid
-    # with Nc = C, that may produce slightly differences in the number of samples of each dataloader
+    # Note: The iid algorithm implemented need K == C == Nc. If an iid run has K != C, the algorith executed is non-iid
+    # with Nc = C, this may produce slightly differences in the number of samples of each dataloader
     if K == Nc and Nc == C:
         print("iid sharding")
         subsets = split_subset_iid(Subset(dataset, train_idx), C, rng)
     else:
         print(f"non iid sharding (Nc = {Nc})")
+        if Nc == C:
+            print(f"Note: The iid algorithm need num_client == num_classes. The non-iid algorithm with Nc = {Nc} "
+                  f"is executed, this may produce slightly differences in the number of samples of each dataloader")
         subsets = split_subset_non_iid(Subset(dataset, train_idx), K, Nc, C, rng)
 
 

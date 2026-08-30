@@ -13,7 +13,7 @@ train:
 
 train_federated:
   num_rounds: 352
-  num_clients: 100
+  num_clients: 100               # K
   client_ratio: 0.1              # C
   num_steps_per_client: 4        # J
   num_classes_per_client: 100    # Nc
@@ -34,7 +34,7 @@ train_federated:
 
 train_federated_sparse:
   num_rounds: 352
-  num_clients: 100
+  num_clients: 100               # K
   client_ratio: 0.1              # C
   num_steps_per_client: 4        # J
   num_classes_per_client: 100    # Nc
