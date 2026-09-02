@@ -1,7 +1,7 @@
 train:
   num_epochs: 20
   batch_size: 64
-  max_lr: 0.014
+  max_lr: 0.0014
   decay_rate: 0.78
   weight_decay: 4.3e-05
   warmup_epochs: 3

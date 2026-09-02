@@ -227,6 +227,8 @@ def start(num_rounds,
     classifier_dict = torch.load(head_path, map_location=DEVICE)
     model.classifier.load_state_dict(classifier_dict)
 
+    print(f'Run name: {run['name']}')
+
     mask = calibrate_federated_mask(model, clients, client_ratio, sparsity, num_calibration_round, mask_rule)
 
     for client in clients:
@@ -235,7 +237,6 @@ def start(num_rounds,
     manager.save(0, model, 2**16, scheduler, logger, -1.0, mask)
 
     # Run the training process for {num_rounds} rounds
-    print(f'Run name: {run['name']}')
     print('Start training')
     train_federated(num_rounds, run, model, clients, val_loader, criterion, scheduler, logger, manager, validation_interval, patience, mask=mask)
     plot_training(run['name'], logs_dir, plots_dir, federated=True)
