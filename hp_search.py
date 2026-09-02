@@ -26,6 +26,7 @@ def random_search(num_trials, num_epochs):
                       warmup_epochs=config["warmup_epochs"],
                       cosine_epochs=config["cosine_epochs"],
                       checkpoints_dir=config["checkpoints_dir"],
+                      patience=config["patience"],
                       logs_dir=config["logs_dir"],
                       plots_dir=config["plots_dir"]
                       )
