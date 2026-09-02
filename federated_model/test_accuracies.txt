@@ -1,0 +1,22 @@
+Run: federated_j_4_nc_100 Test Loss: 0.673173 Acc: 82.67%
+Run: federated_j_8_nc_100 Test Loss: 0.645068 Acc: 82.63%
+Run: federated_j_16_nc_100 Test Loss: 0.692605 Acc: 82.15%
+
+Run: federated_j_4_nc_50 Test Loss: 0.744248 Acc: 81.00%
+Run: federated_j_8_nc_50 Test Loss: 0.792787 Acc: 79.78%
+Run: federated_j_16_nc_50 Test Loss: 1.021050 Acc: 73.32%
+
+Run: federated_j_4_nc_10 Test Loss: 2.229070 Acc: 41.35%
+Run: federated_j_8_nc_10 Test Loss: 4.131085 Acc: 8.01%
+Run: federated_j_8_nc_10_local Test Loss: 3.475745 Acc: 16.04%
+Run: federated_j_16_nc_10 Test Loss: 4.322422 Acc: 5.57%
+
+Run: federated_j_4_nc_5_local Test Loss: 3.893281 Acc: 10.24%
+Run: federated_j_4_nc_5_local_2 Test Loss: 3.188743 Acc: 18.44%
+Run: federated_j_8_nc_5_local Test Loss: 3.204698 Acc: 20.47%
+Run: federated_j_8_nc_5_local_2 Test Loss: 3.315331 Acc: 20.54%
+Run: federated_j_16_nc_5_local Test Loss: 5.090717 Acc: 3.31%
+
+Run: federated_j_4_nc_1_local Test Loss: 10.829251 Acc: 1.01%
+Run: federated_j_8_nc_1_local Test Loss: 12.481454 Acc: 1.08%
+Run: federated_j_16_nc_1_local Test Loss: 24.513434 Acc: 1.00%

@@ -1,0 +1,23 @@
+Part_3:
+Run: fed_sparse_s_0.2_cr_10_j_16_nc_50 Test Loss: 0.650271 Acc: 84.57%
+Run: fed_sparse_s_0.4_cr_10_j_16_nc_50 Test Loss: 0.629481 Acc: 84.71%
+Run: fed_sparse_s_0.6_cr_10_j_16_nc_50 Test Loss: 0.663230 Acc: 83.45%
+Run: fed_sparse_s_0.8_cr_10_j_16_nc_50 Test Loss: 0.701626 Acc: 82.05%
+
+Run: fed_sparse_s_0.4_cr_5_j_16_nc_50 Test Loss: 0.623739 Acc: 84.81%
+Run: fed_sparse_s_0.4_cr_3_j_16_nc_50 Test Loss: 0.642562 Acc: 84.76%
+Run: fed_sparse_s_0.4_cr_1_j_16_nc_50 Test Loss: 0.672771 Acc: 83.41%
+
+
+Extension:
+Run: fed_sparse_most_sensitive_j_16_nc_50 Test Loss: 0.801446 Acc: 78.80%
+Run: fed_sparse_lowest_magnitude_j_16_nc_50 Test Loss: 0.765371 Acc: 80.91%
+Run: fed_sparse_highest_magnitude_j_16_nc_50 Test Loss: 0.631102 Acc: 85.02%
+Run: fed_sparse_random_j_16_nc_50 Test Loss: 0.656241 Acc: 84.26%
+
+Run: fed_sparse_s_0.0__j_4_nc_10_local Test Loss: 0.696979 Acc: 83.40%
+Run: fed_sparse_least_sensitive_j_4_nc_10_local Test Loss: 0.690891 Acc: 82.97%
+Run: fed_sparse_most_sensitive_j_4_nc_10_local Test Loss: 0.680634 Acc: 83.71%
+Run: fed_sparse_highest_magnitude_j_4_nc_10_local Test Loss: 0.696381 Acc: 83.10%
+Run: fed_sparse_lowest_magnitude_j_4_nc_10_local Test Loss: 0.688943 Acc: 83.11%
+Run: fed_sparse_random_j_4_nc_10_local Test Loss: 0.713339 Acc: 82.39%

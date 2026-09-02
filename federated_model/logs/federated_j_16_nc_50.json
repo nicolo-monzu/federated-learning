@@ -1,0 +1,23 @@
+{
+    "name": "federated_j_16_nc_50",
+    "model": "dino_vits16_100_federated",
+    "num_clients": 100,
+    "num_steps_per_client": 16,
+    "client_ratio": 0.1,
+    "num_classes_per_client": 50,
+    "batch_size": 64,
+    "max_learning_rate": 0.007,
+    "decay_rate": 0.78,
+    "weight_decay": 4.3e-05,
+    "optimizer": "SGD(momentum=0.9)",
+    "scheduler": "CosineAnnealingLR with warm-up",
+    "rounds_per_scheduler_step": 1,
+    "warmup_scheduler_steps": 13,
+    "cosine_scheduler_steps": 75,
+    "scale_grow_interval": 12,
+    "validation_interval": 4,
+    "augmentation": "MixUp/CutMix",
+    "total_rounds": 48,
+    "best_round": 48,
+    "best_accuracy": 73.88
+}

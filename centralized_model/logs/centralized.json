@@ -1,0 +1,17 @@
+{
+    "name": "centralized",
+    "model": "dino_vits16_100_centralized",
+    "batch_size": 64,
+    "max_learning_rate": 0.0014,
+    "decay_rate": 0.78,
+    "weight_decay": 4.3e-05,
+    "optimizer": "SGD(momentum=0.9)",
+    "scheduler": "CosineAnnealingLR with warm-up",
+    "warmup_epochs": 3,
+    "cosine_epochs": 17,
+    "augmentation": "MixUp/CutMix",
+    "total_epochs": 20,
+    "best_epoch": 18,
+    "best_accuracy": 89.1,
+    "debug": false
+}

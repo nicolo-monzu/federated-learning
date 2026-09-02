@@ -1,0 +1,1 @@
+Run: centralized Test Loss: 0.466772 Acc: 88.89%
